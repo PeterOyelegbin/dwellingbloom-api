@@ -28,7 +28,7 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure$@djfjrjewiiid')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', cast=bool, default=True)
 
-ALLOWED_HOSTS = ['127.0.0.1', '*.onrender.com']
+ALLOWED_HOSTS = ['127.0.0.1', 'dwellingbloomapi.onrender.com']
 
 
 # Application definition
