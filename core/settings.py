@@ -53,6 +53,7 @@ INSTALLED_APPS = [
 
     # Local apps
     'authentication',
+    # 'properties',
 ]
 
 MIDDLEWARE = [
@@ -165,22 +166,20 @@ ACCOUNT_EMAIL_REQUIRED = True  # Email is required
 ACCOUNT_UNIQUE_EMAIL = True  # Email must be unique
 ACCOUNT_USERNAME_REQUIRED = False  # No username is required
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None  # No username field in the user model
-AUTHENTICATION_BACKENDS = (
-    # 'auth.backends.EmailBackend',
-    # 'django.contrib.auth.backends.ModelBackend',
-    'allauth.account.auth_backends.AuthenticationBackend',
-)
+AUTHENTICATION_BACKENDS = ('allauth.account.auth_backends.AuthenticationBackend',)
 
 SITE_ID = 1
+
 
 # cors policy config
 CORS_ORIGIN_ALLOW_ALL = True
 CORS_ALLOW_CREDENTIALS = True
 
+
 # static files config
-# STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 STATIC_ROOT = BASE_DIR/'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 
 # Rest framework config
 REST_FRAMEWORK = {
@@ -192,19 +191,44 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/minute',
-        'user': '200/minute',
+        'anon': '5/minute',
+        'user': '100/minute',
     },
 }
 
+
 # JWT config
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=3),
-    'BLACKLIST_AFTER_ROTATION': True,
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=10),  # Shorter for security
+
+    # No refresh tokens as per requirements
+    'REFRESH_TOKEN_LIFETIME': None,
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,                # Prevent token reuse
+    'UPDATE_LAST_LOGIN': True,
+
+    # Algorithm for signing tokens
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': config('SECRET_KEY'),
+    'VERIFYING_KEY': None,                           # Explicitly set
+
+    # Token type header & User ID claim
     'AUTH_HEADER_TYPES': ('Bearer',),
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    
+     # Token identification
+    'JTI_CLAIM': 'jti',                              # This is crucial for blacklisting
+
+    # Token class
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+
+    # Token type claim
+    'TOKEN_TYPE_CLAIM': 'token_type',
 }
 
+
+# OAuth config
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
         'SCOPE': [
@@ -231,9 +255,24 @@ CACHES = {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'unique-snowflake',
     }
+
+    # # Add Redis configuration for production
+    # 'default': {
+    #     'BACKEND': 'django_redis.cache.RedisCache',
+    #     'LOCATION': 'redis://127.0.0.1:6379/1',
+    #     'OPTIONS': {
+    #         'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+    #     }
+    # }
 }
 
+# Use Redis as session backend (optional but recommended)
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
+
+
 FRONTEND_URL = "http://127.0.0.1:8000/api/v1/auth"
+
 
 # Email config
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -245,6 +284,7 @@ EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default='your_password')
 EMAIL_USE_TLS = False
 EMAIL_USE_SSL = True
 EMAIL_TIMEOUT = 3600  # 3600 sec
+
 
 # Logging config
 LOGGING = {

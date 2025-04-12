@@ -1,30 +1,24 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .views import SignupView, ResendActivationEmailView, VerifyEmailView, GoogleAuthRedirect, GoogleAuthCallback, LoginView, LogoutView, ResetPasswordView, UpdatePasswordView, ProfileView, UsersView
-
-router = DefaultRouter(trailing_slash=False)
-
-# Auth Endpoints
-router.register(r'auth/signup', SignupView, basename="signup")
-router.register(r'auth/resend-activation', ResendActivationEmailView, basename="resend-activation")
-router.register(r'auth/login', LoginView, basename="login")
-router.register(r'auth/logout', LogoutView, basename="logout")
-router.register(r'auth/password/reset', ResetPasswordView, basename="reset-password")
-router.register(r'auth/password/update', UpdatePasswordView, basename="update-password")
-
-# Google OAuth
-router.register(r'auth/google/login', GoogleAuthRedirect, basename="google-login")
-router.register(r'auth/google/callback', GoogleAuthCallback, basename="google-callback")
-
-# User Management
-router.register(r'users', UsersView, basename="user")
+from django.urls import path
+from .views import AuthViewSet, UserViewSet
 
 urlpatterns = [
-    path('', include(router.urls)),
+    # Auth Endpoints
+    path('auth/signup', AuthViewSet.as_view({'post': 'signup'}), name='signup'),
+    path('auth/resend-activation', AuthViewSet.as_view({'post': 'resend_activation'}), name='resend-activation'),
+    path('auth/verify-email/<str:uidb64>/<str:token>', AuthViewSet.as_view({'post': 'verify_email'}), name='verify-email'),
+    path('auth/login', AuthViewSet.as_view({'post': 'login'}), name='login'),
+    path('auth/logout', AuthViewSet.as_view({'post': 'logout'}), name='logout'),
+    path('auth/password-reset/request', AuthViewSet.as_view({'post': 'reset_password'}), name='reset-password'),
+    path('auth/password-reset/confirm', AuthViewSet.as_view({'post': 'confirm_reset_password'}), name='update-password'),
 
-    # Email Verification
-    path('auth/verify-email/<str:uidb64>/<str:token>', VerifyEmailView.as_view({'post': 'verify'}), name='verify-email'),
+    # Google OAuth
+    path('auth/oauth/google', AuthViewSet.as_view({'get': 'google_login'}), name='google-login'),
+    path('auth/oauth/google/callback', AuthViewSet.as_view({'get': 'google_callback'}), name='google-callback'),
 
     # Current User Profile
-    path('users/me/profile', ProfileView.as_view({'get': 'retrieve', 'patch': 'update'}), name='user-profile'),
+    path('users/me', UserViewSet.as_view({'get': 'me', 'patch': 'profile_update'}), name='user-profile'),
+
+    # Admin User Management
+    path('admin/users', UserViewSet.as_view({'get': 'list'}), name='user-list'),
+    path('admin/users/<uuid:pk>', UserViewSet.as_view({'get': 'retrieve', 'delete': 'destroy'}), name='user-detail'),
 ]

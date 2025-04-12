@@ -10,22 +10,26 @@ import random
 # Create your models here.
 class UserModel(AbstractUser):
     """
-    This model will serve as the default authentication model via AUTH_USER_MODEL in settings.py
+    This model is used to store user information.
+    It inherits from AbstractUser to use Django's built-in user authentication system.
     """
+    ROLE_CHOICES = (
+        ('TENANT', 'Tenant'),
+        ('OWNER', 'Owner'),
+    )
+
     username = None
     id = models.UUIDField(default=uuid4, unique=True, primary_key=True, editable=False)
     first_name = models.CharField(max_length=255)
     last_name = models.CharField(max_length=255)
-    email = models.EmailField(max_length=255, unique=True)
-    phone_number = models.CharField(max_length=15, blank=True, null=True)
-    is_buyer = models.BooleanField(default=False)
-    is_seller = models.BooleanField(default=False)
-    is_admin = models.BooleanField(default=False)
-    bvn = models.CharField(max_length=255, blank=True, null=True)
-    account_number = models.CharField(max_length=255, blank=True, null=True)
+    email = models.EmailField(max_length=255, unique=True, db_index=True)
+    phone_number = models.CharField(max_length=15, help_text='+23480XXXXXXXX', blank=True, null=True)
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='TENANT')
+    bvn = models.CharField(max_length=25, blank=True, null=True)
+    account_number = models.CharField(max_length=10, blank=True, null=True)
     account_name = models.CharField(max_length=255, blank=True, null=True)
     bank_name = models.CharField(max_length=255, blank=True, null=True)
-    verified = models.BooleanField(default=False)
+    is_verified = models.BooleanField(default=False)
     
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ['first_name', 'last_name',]
@@ -40,6 +44,10 @@ class UserModel(AbstractUser):
 
 
 class PasswordResetToken(models.Model):
+    """
+    This model is used to store the password reset token for a user.
+    It contains the user, the token itself, and the creation time.
+    """
     user = models.ForeignKey(UserModel, on_delete=models.CASCADE)
     token = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)

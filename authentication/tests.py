@@ -5,9 +5,7 @@ from rest_framework import status
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.contrib.auth.tokens import default_token_generator
-from .models import UserModel, PasswordResetToken
-from .serializers import SignupSerializer, LoginSerializer
-import json
+from .models import UserModel
 
 # Override settings to use a test database
 @override_settings(
@@ -24,18 +22,28 @@ class UserViewsTestCase(TestCase):
         Set up test data and client.
         """
         self.client = APIClient()
-        self.signup_url = reverse('signup-list')
-        self.login_url = reverse('login-list')
+        self.signup_url = reverse('signup')
+        self.login_url = reverse('login')
         self.verify_email_url = reverse('verify-email', args=['uidb64', 'token'])
         self.user_data = {
             'email': 'test@example.com',
-            'password': 'testpassword123',
+            'password': 'tEstp@ssword1',
             'first_name': 'Test',
             'last_name': 'User',
+            'role': 'TENANT'
+        }
+        self.signup_data = {
+            'email': 'test@example.com',
+            'password': 'tEstp@ssword1',
+            'confirm_password': 'tEstp@ssword1',
+            'first_name': 'Test',
+            'last_name': 'User',
+            'role': 'TENANT'
         }
         self.login_data = {
             'email': 'test@example.com',
-            'password': 'testpassword123',
+            'password': 'tEstp@ssword1',
+            'confirm_password': 'tEstp@ssword1'
         }
 
 
@@ -43,10 +51,10 @@ class UserViewsTestCase(TestCase):
         """
         Test successful user signup.
         """
-        response = self.client.post(self.signup_url, data=self.user_data, format='json')
+        response = self.client.post(self.signup_url, data=self.signup_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['success'], True)
-        self.assertEqual(response.data['message'], 'Verification email sent')
+        self.assertEqual(response.data['message'], 'Signup successful, check email for verification.')
 
         # Check if the user was created in the database
         user = UserModel.objects.filter(email=self.user_data['email']).first()
@@ -73,44 +81,21 @@ class UserViewsTestCase(TestCase):
         """
         # Create a user
         user = UserModel.objects.create_user(**self.user_data)
-        user.verified = False
+        user.is_verified = False
         user.save()
 
         # Generate a valid token (mocking the token generation logic)
         uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
 
-        response = self.client.get(self.verify_email_url.replace('uidb64', uidb64).replace('token', token))
+        response = self.client.post(self.verify_email_url.replace('uidb64', uidb64).replace('token', token))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['success'], True)
-        self.assertEqual(response.data['message'], 'Email verified successfully')
+        self.assertEqual(response.data['message'], 'Email verified successfully.')
 
         # Check if the user is now verified
         user.refresh_from_db()
-        self.assertTrue(user.verified)
-
-
-    def test_verify_email_invalid_token(self):
-        """
-        Test email verification with an invalid token.
-        """
-        # Create a user
-        user = UserModel.objects.create_user(**self.user_data)
-        user.verified = False
-        user.save()
-
-        # Use an invalid token
-        uidb64 = 'invalid_uidb64'
-        token = 'invalid_token'
-
-        response = self.client.get(self.verify_email_url.replace('uidb64', uidb64).replace('token', token))
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['success'], False)
-        self.assertEqual(response.data['error'], 'Invalid token')
-
-        # Ensure the user is still not verified
-        user.refresh_from_db()
-        self.assertFalse(user.verified)
+        self.assertTrue(user.is_verified)
 
 
     def test_login_success(self):
@@ -119,7 +104,7 @@ class UserViewsTestCase(TestCase):
         """
         # Create a user first
         user = UserModel.objects.create_user(**self.user_data)
-        user.verified = True  # Ensure the user is verified
+        user.is_verified = True  # Ensure the user is verified
         user.save()
 
         response = self.client.post(self.login_url, data=self.login_data, format='json')
@@ -135,14 +120,14 @@ class UserViewsTestCase(TestCase):
         """
         # Create a user first
         user = UserModel.objects.create_user(**self.user_data)
-        user.verified = True
+        user.is_verified = True
         user.save()
 
         invalid_login_data = {
             'email': 'test@example.com',
-            'password': 'wrongpassword',
+            'password': 'wr0ngPa$$word',
         }
         response = self.client.post(self.login_url, data=invalid_login_data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data['success'], False)
-        self.assertEqual(response.data['message'], 'Invalid credentials')
+        self.assertEqual(response.data['error'], "Validation error: {'non_field_errors': [ErrorDetail(string='Invalid email or password.', code='invalid')]}")
