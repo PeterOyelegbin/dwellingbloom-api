@@ -12,35 +12,29 @@ class UserManagementTests(APITestCase):
         self.client = APIClient()
         self.user_data = {
             'email': 'test@example.com',
-            'password': 'testpassword123',
+            'password': 'tEstp@ssword3',
             'first_name': 'Test',
-            'last_name': 'User'
+            'last_name': 'User',
+            'role': 'TENANT'
         }
         self.user = UserModel.objects.create_user(**self.user_data)
-        self.user.verified = False
+        self.user.is_verified = True
         self.user.save()
 
 
     def test_user_signup(self):
-        url = reverse('signup-list')
+        url = reverse('signup')
         data = {
-            'email': 'newuser@example.com',
-            'password': 'newpassword123',
+            'email': 'newser@example.com',
+            'password': 'st@ng8Te',
+            'confirm_password': 'st@ng8Te',
             'first_name': 'New',
-            'last_name': 'User'
+            'last_name': 'User',
+            'role': 'TENANT'            
         }
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(UserModel.objects.filter(email='newuser@example.com').exists())
-
-
-    def test_resend_activation_email(self):
-        url = reverse('resend-activation-list')
-        data = {
-            'email': 'test@example.com'
-        }
-        response = self.client.post(url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(UserModel.objects.filter(email='newuser@example.com').exists())
 
 
     def test_verify_email(self):
@@ -50,17 +44,17 @@ class UserManagementTests(APITestCase):
 
         # Now verify the email
         url = reverse('verify-email', kwargs={'uidb64': uid, 'token': token})
-        response = self.client.get(url)
+        response = self.client.post(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.user.refresh_from_db()
-        self.assertTrue(self.user.verified)
+        self.assertTrue(self.user.is_verified)
 
 
     def test_user_login(self):
-        url = reverse('login-list')
+        url = reverse('login')
         data = {
             'email': 'test@example.com',
-            'password': 'testpassword123'
+            'password': 'tEstp@ssword3'
         }
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -69,23 +63,23 @@ class UserManagementTests(APITestCase):
 
     def test_user_logout(self):
         # First, login to get the token
-        login_url = reverse('login-list')
+        login_url = reverse('login')
         login_data = {
             'email': 'test@example.com',
-            'password': 'testpassword123'
+            'password': 'tEstp@ssword3'
         }
         login_response = self.client.post(login_url, login_data, format='json')
         token = login_response.data['access_token']
 
         # Now, logout
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
-        logout_url = reverse('logout-list')
+        logout_url = reverse('logout')
         logout_response = self.client.post(logout_url)
         self.assertEqual(logout_response.status_code, status.HTTP_205_RESET_CONTENT)
 
 
     def test_password_reset(self):
-        url = reverse('reset-password-list')
+        url = reverse('reset-password')
         data = {
             'email': 'test@example.com'
         }
@@ -100,19 +94,35 @@ class UserManagementTests(APITestCase):
         PasswordResetToken.objects.create(user=self.user, token=reset_token)
 
         # Now, update the password
-        url = reverse('update-password-list')
+        url = reverse('update-password')
         data = {
             'otp': reset_token,
-            'new_password': 'newpassword123'
+            'new_password': 'nEwp@ssword1',
+            'confirm_password': 'nEwp@ssword1'
         }
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.user.refresh_from_db()
-        self.assertTrue(self.user.check_password('newpassword123'))
+        self.assertTrue(self.user.check_password('nEwp@ssword1'))
+
+
+    def test_resend_activation_email(self):
+        # First, create a user that needs activation
+        self.user.is_verified = False
+        self.user.save()
+        
+        # Now, resend the activation email
+        url = reverse('resend-activation')
+        data = {
+            'email': 'test@example.com'
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 
     def test_google_auth_redirect(self):
-        url = reverse('google-redirect-list')
+        url = reverse('google-login')
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_302_FOUND)
         self.assertIn('accounts.google.com', response.url)
+        

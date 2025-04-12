@@ -47,8 +47,9 @@ class CustomJWTAuthentication(JWTAuthentication):
         # Validate the token using the default mechanism
         validated_token = super().get_validated_token(raw_token)
         
-        # Create a cache key using the token's string representation
-        cache_key = self.get_cache_key(str(validated_token))
+        # Create a cache key using the token's jti (JWT ID)
+        jti = validated_token['jti']
+        cache_key = self.get_cache_key(jti)
         
         # Check if the token is blacklisted in the cache
         if cache.get(cache_key) == 'blacklisted':
@@ -56,12 +57,12 @@ class CustomJWTAuthentication(JWTAuthentication):
 
         return validated_token
 
-    def get_cache_key(self, token_str):
+    def get_cache_key(self, jti):
         """
         Generates a cache key based on the token string by hashing the token.
         You can also include additional logic to create a unique key.
         """
-        return hashlib.sha256(token_str.encode()).hexdigest()
+        return hashlib.sha256(jti.encode()).hexdigest()
     
 
 # Get the email and general error logger
@@ -76,7 +77,6 @@ headers = {
     # "Token": f"{settings.YOUVERIFY_KEY}",
     "Content-Type": "application/json",
 }
-
 def bvn_verification(bvn):
     url = base_url + "v2/api/identity/ng/nin"
     data = {
@@ -85,6 +85,13 @@ def bvn_verification(bvn):
     }
     response = requests.post(url, headers=headers, json=data)
     return response
+
+
+def generate_email_activation_link(user):
+    uid = urlsafe_base64_encode(force_bytes(user.id))
+    token = default_token_generator.make_token(user)
+    activation_link = f"{settings.FRONTEND_URL}/verify-email/{uid}/{token}"
+    return activation_link
 
 
 # Asynchronous email sending
@@ -98,24 +105,17 @@ def send_async_email(email_subject, email_body, email_recipient, email_headers=N
         email_logger.error(f"Error sending email: {e}")
 
 
-def generate_email_activation_link(user):
-    uid = urlsafe_base64_encode(force_bytes(user.id))
-    token = default_token_generator.make_token(user)
-    activation_link = f"{settings.FRONTEND_URL}/verify-email/{uid}/{token}"
-    return activation_link
-
-
 def verify_email_activation_link(user, token):
     try:
         if default_token_generator.check_token(user, token):
-            user.verified = True
+            user.is_verified = True
             user.last_login = timezone.now()
             user.save()
             return True
         else:
-            general_logger.error("Email activation error: Invalid or expired token")
+            general_logger.error("Invalid or expired token: user=%s, token=%s", user, token)
             return False
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         general_logger.error(f"Error verifying email activation link: {e}")
         return False
     
