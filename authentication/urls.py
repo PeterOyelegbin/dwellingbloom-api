@@ -7,13 +7,10 @@ urlpatterns = [
     path('auth/resend-activation', AuthViewSet.as_view({'post': 'resend_activation'}), name='resend-activation'),
     path('auth/verify-email/<str:uidb64>/<str:token>', AuthViewSet.as_view({'post': 'verify_email'}), name='verify-email'),
     path('auth/login', AuthViewSet.as_view({'post': 'login'}), name='login'),
+    path('auth/token/refresh', AuthViewSet.as_view({'post': 'refresh'}), name='token-refresh'),
     path('auth/logout', AuthViewSet.as_view({'post': 'logout'}), name='logout'),
     path('auth/password-reset/request', AuthViewSet.as_view({'post': 'reset_password'}), name='reset-password'),
     path('auth/password-reset/confirm', AuthViewSet.as_view({'post': 'confirm_reset_password'}), name='update-password'),
-
-    # Google OAuth
-    path('auth/oauth/google', AuthViewSet.as_view({'get': 'google_login'}), name='google-login'),
-    path('auth/oauth/google/callback', AuthViewSet.as_view({'get': 'google_callback'}), name='google-callback'),
 
     # Current User Profile
     path('users/me', UserViewSet.as_view({'get': 'me', 'patch': 'profile_update'}), name='user-profile'),

@@ -1,9 +1,10 @@
 from django.db import models
 from django.utils.timezone import now
 from django.contrib.auth.models import AbstractUser
+from utils.model_manager import UserModelManager
 from uuid import uuid4
 from datetime import timedelta
-from utils import UserModelManager
+from decouple import config
 import random
 
 
@@ -25,12 +26,14 @@ class UserModel(AbstractUser):
     email = models.EmailField(max_length=255, unique=True, db_index=True)
     phone_number = models.CharField(max_length=15, help_text='+23480XXXXXXXX', blank=True, null=True)
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='TENANT')
+    # nin = models.CharField(max_length=25, blank=True, null=True)
     bvn = models.CharField(max_length=25, blank=True, null=True)
     account_number = models.CharField(max_length=10, blank=True, null=True)
     account_name = models.CharField(max_length=255, blank=True, null=True)
     bank_name = models.CharField(max_length=255, blank=True, null=True)
     is_verified = models.BooleanField(default=False)
-    
+    updated_at = models.DateTimeField(auto_now=True)
+
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ['first_name', 'last_name',]
 
@@ -66,6 +69,5 @@ class PasswordResetToken(models.Model):
         """
         Check if the OTP has expired.
         """
-        expiration_time = timedelta(minutes=10) #Set expiration duration to 10 minutes
+        expiration_time = timedelta(minutes=config('PASSWORD_RESET_TOKEN_EXPIRE_MINUTES'))
         return now() > self.created_at + expiration_time
-    
