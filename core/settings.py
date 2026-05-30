@@ -278,7 +278,7 @@ SESSION_CACHE_ALIAS = "default"
 
 
 # Celery Config
-CELERY_TIMEZONE = "Nigeria/Lagos"
+CELERY_TIMEZONE = "Africa/Lagos"
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
 CELERY_BROKER_URL = config("REDIS_URL")
