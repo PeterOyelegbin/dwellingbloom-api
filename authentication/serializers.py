@@ -4,8 +4,18 @@ from .models import UserModel, PasswordResetToken
 
 
 class SignupSerializer(serializers.ModelSerializer):
-    email = serializers.EmailField(validators=[validators.UniqueValidator(queryset=UserModel.objects.all())])
-    password = serializers.CharField(min_length=8, write_only=True, validators=[RegexValidator(regex='^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$', message='Password must be 8+ chars with a mix of uppercase, lowercase, numbers, and symbols')], help_text="8+ chars with uppercase, lowercase, number, and special symbol")
+    email = serializers.EmailField(validators=[
+            validators.UniqueValidator(queryset=UserModel.objects.all())
+        ]
+    )
+    password = serializers.CharField(min_length=8, write_only=True, validators=[
+            RegexValidator(
+                regex=r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$',
+                message='Password must be 8+ chars with a mix of uppercase, lowercase, numbers, and symbols'
+            )
+        ],
+        help_text="8+ chars with uppercase, lowercase, number, and special symbol"
+    )
     confirm_password = serializers.CharField(min_length=8, write_only=True)
 
     class Meta:
@@ -87,7 +97,14 @@ class ResetPasswordSerializer(serializers.Serializer):
 
 class UpdatePasswordSerializer(serializers.Serializer):
     otp = serializers.CharField()
-    new_password = serializers.CharField(min_length=8, write_only=True, validators=[RegexValidator(regex='^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$', message='Password must be 8+ chars with a mix of uppercase, lowercase, numbers, and symbols')], help_text="8+ chars with uppercase, lowercase, number, and special symbol")
+    new_password = serializers.CharField(min_length=8, write_only=True, validators=[
+            RegexValidator(
+                regex=r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$',
+                message='Password must be 8+ chars with a mix of uppercase, lowercase, numbers, and symbols'
+            )
+        ],
+        help_text="8+ chars with uppercase, lowercase, number, and special symbol"
+    )
     confirm_password = serializers.CharField(min_length=8, write_only=True)
 
     def validate(self, attrs):

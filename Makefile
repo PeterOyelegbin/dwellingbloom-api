@@ -26,7 +26,7 @@ run-migration:
 
 start-celery:
 	# Start Celery worker in the background
-	celery -A core worker --loglevel=info --detach
+	celery -A core worker -l info --concurrency=2 --max-tasks-per-child=50 -detach
 
 run-app:
 	# Start the development server
