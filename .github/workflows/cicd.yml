@@ -3,12 +3,16 @@ name: DwellingBloom Pipeline
 on:
   push:
     branches:
+      - dev
       - main
+
+  pull_request:
+    branches:
       - dev
 
 jobs:
   lint-format-check:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    if: github.event_name == 'pull_request' && github.ref == 'refs/heads/dev'
     name: Lint and Format Codebase
     runs-on: ubuntu-latest
 
@@ -79,7 +83,6 @@ jobs:
           make tests
           
   deploy:
-    needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     name: Deploy Application
     runs-on: ubuntu-latest
