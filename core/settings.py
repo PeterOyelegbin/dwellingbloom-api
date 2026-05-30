@@ -33,7 +33,7 @@ if len(SECRET_KEY.encode()) < 32:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', cast=bool, default=True)
 
-ALLOWED_HOSTS = ['127.0.0.1', 'dwellingbloomapi.onrender.com']
+ALLOWED_HOSTS = ['127.0.0.1', '*.vercel.app']
 
 # CORS_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173", "https://dwellingbloom.netlify.app"]
 
