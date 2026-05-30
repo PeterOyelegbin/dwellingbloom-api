@@ -1,0 +1,120 @@
+name: DwellingBloom Pipeline
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+
+  pull_request:
+    branches:
+      - dev
+
+jobs:
+  lint-format-check:
+    if: github.event_name == 'pull_request' && github.ref == 'refs/heads/dev'
+    name: Lint and Format Codebase
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Display Trigger Information
+        run: |
+          echo "The job was automatically triggered by a ${{ github.event_name }} event."
+          echo "This job is now running on a ${{ runner.os }} server hosted by GitHub!"
+          echo "The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+
+      - name: Checkout Repository Code
+        uses: actions/checkout@v3
+
+      - name: Set Up Python Environment
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.10'
+
+      - name: Install Linting Tools
+        run: |
+          echo "Installing linting tools."
+          make install-deps
+
+      - name: Run Flake8 Linter
+        run: |
+          echo "Running Flake8 linter."
+          make lint
+
+      - name: Run Black Formatter Check
+        run: |
+          echo "Checking code formatting with Black."
+          make format-check
+
+  test:
+    needs: lint-format-check
+    name: Test Application
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Display Trigger Information
+        run: |
+          echo "The job was automatically triggered by a ${{ github.event_name }} event."
+          echo "This job is now running on a ${{ runner.os }} server hosted by GitHub!"
+          echo "The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+
+      - name: Checkout Repository Code
+        uses: actions/checkout@v3
+
+      - name: Confirm Repository Cloning
+        run: echo "The ${{ github.repository }} repository has been cloned to the runner."
+
+      - name: Set Up Python Environment
+        run: echo "Setting up Python environment for testing."
+
+      - name: Install Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          echo "Installing project dependencies."
+          make install-deps
+
+      - name: Execute Test Suite
+        run: |
+          echo "Running tests."
+          make tests
+          
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: Deploy Application
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Display Trigger Information
+        run: |
+          echo "The job was automatically triggered by a ${{ github.event_name }} event."
+          echo "This job is now running on a ${{ runner.os }} server hosted by GitHub!"
+          echo "The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+
+      - name: Checkout Repository Code
+        uses: actions/checkout@v3
+
+      - name: Confirm Repository Cloning
+        run: echo "The ${{ github.repository }} repository has been cloned to the runner."
+
+      - name: Set Up Python Environment
+        run: echo "Setting up Python environment for deployment."
+
+      - name: Install Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          echo "Installing project dependencies."
+          make install-deps
+
+      - name: Deploy Application
+        run: |
+          echo "Deploying application to production environment."
+          make deploy
+          

@@ -3,91 +3,78 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.exceptions import ValidationError
-from rest_framework_simplejwt.tokens import AccessToken
-from django.conf import settings
-from django.shortcuts import get_object_or_404, redirect
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
+from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
-from drf_yasg.utils import swagger_auto_schema
-from threading import Thread
-from utils import CustomJWTAuthentication, send_async_email, cache, general_logger, bvn_verification, generate_email_activation_link, verify_email_activation_link
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from utils.logger_config import general_logger
+from utils.jwt_config import CustomJWTAuthentication
+from utils.kyc_config import verify_bvn
+from utils.mail_config import *
+from utils.page_config import ListPagination
 from .models import PasswordResetToken
-from .serializers import (SignupSerializer, ResendActivationEmailSerializer,
-    LoginSerializer, ResetPasswordSerializer,
-    UpdatePasswordSerializer, ProfileSerializer, AdminUserSerializer
-)
-import requests, time
+from .serializers import *
 
 
 # Create your views here.
 User = get_user_model()
 
+@extend_schema(tags=['Auth'])
 class AuthViewSet(viewsets.ViewSet):
     """
     Handles authentication: signup, email verification, login, logout, password reset.
     """
+    serializer_class = None  # Set in each action
+
     def get_permissions(self):
         if self.action in ['logout']:
             return [permissions.IsAuthenticated()]
         else:
             return [permissions.AllowAny()]
-        
+
     # ---- Signup ---- #
-    @swagger_auto_schema(request_body=SignupSerializer, responses={201: 'CREATED', 400: 'BAD REQUEST', 500: 'SERVER ERROR'})
+    @extend_schema(request=SignupSerializer)
     def signup(self, request):
         """
         User signup endpoint
-        
+
         Handles user registration and sends verification email.
         """
         serializer = SignupSerializer(data=request.data)
         try:
             serializer.is_valid(raise_exception=True)
-            if serializer.validated_data['role'] == 'OWNER':
-                print("is_owner")
-                # # TODO: Implement BVN verification for sellers
-                # verify_bvn = bvn_verification(serializer.validated_data['bvn'])
-                # if verify_bvn.status_code == 200:
-                #     serializer.save(role='OWNER')  # Set user as owner
-                # else:
-                #     general_logger.error("BVN verification failed: %s", verify_bvn.json())
-                #     response_data = {
-                #         'success': False,
-                #         'status': 400,
-                #         'error': 'BVN verification failed',
-                #     }
-                #     return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                # For tenants, save without BVN verification
-                serializer.save(role='TENANT')  # Set user as tenant
+            verification = verify_bvn(serializer.validated_data)
+            if not verification.get("success"):
+                return Response(
+                    {"success": False, "status": 400, "error": "BVN verification failed"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            serializer.save()
             AuthViewSet.resend_activation(self, request, reg_email=serializer.validated_data['email'])  # Send activation email
-            response_data = {
-                'success': True,
-                'status': 201,
-                'message': 'Signup successful, check email for verification.',
-            }
-            return Response(response_data, status=status.HTTP_201_CREATED)
+            return Response(
+                {"success": True, "status": 201, "message": "Signup successful, check email for verification."},
+                status=status.HTTP_201_CREATED
+            )
         except ValidationError as e:
             general_logger.error("Validation error: %s", e)
-            response_data = {
-                "success": False,
-                "status": 400,
-                "error": f"Validation error: {e}",
-            }
-            return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
             general_logger.error("Exception error: %s", e)
-            response_data = {
-                "success": False,
-                "status": 500,
-                "error": "An error occured: Contact support",
-            }
-            return Response(response_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            return Response(
+                {"success": False, "status": 500, "error": "An error occured: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     # ---- Resend Activation Email ---- #
+    @extend_schema(request=ResendActivationEmailSerializer)
     @action(detail=False, methods=['post'], throttle_classes=[AnonRateThrottle])
-    @swagger_auto_schema(request_body= ResendActivationEmailSerializer, responses={200: 'OK', 400: 'BAD REQUEST', 500:'SERVER ERROR'})
     def resend_activation(self, request, reg_email=None):
         """
         Resend email verification link endpoint
@@ -100,305 +87,183 @@ class AuthViewSet(viewsets.ViewSet):
             serializer.is_valid(raise_exception=True)
             user = serializer.validated_data['user']
             verification_link = generate_email_activation_link(user)
-            email_subject = 'App Name: Verify Your Email'
-            email_body = f"""
-            <html>
-            <body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4;">
-                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f4f4f4;">
-                    <tr>
-                        <td align="center" style="padding: 20px;">
-                            <!-- Card Container -->
-                            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);">
-                                <tr>
-                                    <td style="padding: 20px;">
-                                        <!-- Content -->
-                                        <p style="font-size: 16px; color: #333333; margin: 0 0 20px 0;">Hello {user},</p>
-                                        <p style="font-size: 16px; color: #333333; margin: 0 0 20px 0;">Thank you for registering. Please verify your email address by clicking the button below:</p>
-                                        <table cellpadding="0" cellspacing="0" border="0" align="center">
-                                            <tr>
-                                                <td align="center">
-                                                    <a href="{verification_link}" style="background-color: #4CAF50; color: white; padding: 10px 30px; text-align: center; text-decoration: none; display: inline-block; border-radius: 5px; font-size: 16px;">
-                                                        Verify Email
-                                                    </a>
-                                                </td>
-                                            </tr>
-                                        </table>
-                                        <p style="font-size: 16px; color: #333333; margin: 20px 0 0 0;">If the button doesn't work, copy and paste this link into your browser:</p>
-                                        <p style="font-size: 16px; color: #333333; margin: 10px 0 20px 0;"><a href="{verification_link}" style="color: #4CAF50; text-decoration: none;">{verification_link}</a></p>
-                                        <p style="font-size: 16px; color: #333333; margin: 0;">Regards,<br><a href="https://appname.com.ng" style="font-style: bold; text-decoration: none;">App Name</a></p>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-                </table>
-            </body>
-            </html>
-            """
+            email_subject = 'DwellingBloom App Support: Verify Your Email'
+            email_body = verification_email_template(user, verification_link)
             recipient = [user.email]
             # Asynchronously handle send mail
-            Thread(target=send_async_email, args=(email_subject, email_body, recipient)).start()
-            response = {
-                "success": True,
-                "status": 200,
-                "message": "Activation email resent.",
-            }
-            return Response(response, status=status.HTTP_200_OK)
+            send_email_task.delay(email_subject, email_body, recipient)
+            return Response(
+                {"success": True, "status": 200, "message": "Activation email resent."},
+                status=status.HTTP_200_OK
+            )
         except ValidationError as e:
             general_logger.error("Validation error: %s", e)
-            response = {
-                "success": False,
-                "status": 400,
-                "error": f"Validation error: {e}",
-            }
-            return Response(response, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
             general_logger.error("Exception error: %s", e)
-            response = {
-                "success": False,
-                "status": 500,
-                "error": "An error occured: Contact support",
-            }
-            return Response(response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            return Response(
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     # ---- Verify Email ---- #
-    @swagger_auto_schema(responses={200: 'OK', 400: 'BAD REQUEST', 404: 'NOT FOUND', 500: 'SERVER ERROR'})
+    @extend_schema()
     def verify_email(self, request, uidb64=None, token=None):
         """
         Email verification endpoint
-        
+
         Verifies the user's email using the token sent in the activation link.
         """
         try:
             uid = force_str(urlsafe_base64_decode(uidb64))
             user = User.objects.get(id=uid)
             if verify_email_activation_link(user, token):
-                response_data = {
-                    'success': True,
-                    'status': 200,
-                    'message': 'Email verified successfully.',
-                }
-                return Response(response_data, status=status.HTTP_200_OK)
+                return Response(
+                    {"success": True, "status": 200, "message": "Email verified successfully."},
+                    status=status.HTTP_200_OK
+                )
             else:
-                response_data = {
-                    'success': False,
-                    'status': 400,
-                    'error': 'Invalid token.',
-                }
-                return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"success": False, "status": 400, "error": "Invalid verification link."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         except User.DoesNotExist:
             general_logger.error("User not found: %s", uid)
-            response_data = {
-                "success": False,
-                "status": 404,
-                "error": "User not found.",
-            }
-            return Response(response_data, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"success": False, "status": 404, "error": "User not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
         except (TypeError, ValueError, Exception) as e:
             general_logger.error("Exception error: %s", e)
-            response_data = {
-                "success": False,
-                "status": 500,
-                "error": "An error occured: Contact support",
-            }
-            return Response(response_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            return Response(
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     # ---- Login ---- #
+    @extend_schema(request=LoginSerializer)
     @action(detail=False, methods=['post'], throttle_classes=[AnonRateThrottle])
-    @swagger_auto_schema(request_body=LoginSerializer, responses={200: 'OK', 400: 'BAD_REQUEST', 500: 'SERVER ERROR'})
     def login(self, request):
         """
         User login endpoint
-        
-        Authenticates user and returns JWT tokens.
+
+        Authenticates user and returns JWT access and refresh tokens.
         """
         serializer = LoginSerializer(data=request.data)
         try:
             serializer.is_valid(raise_exception=True)
             user = serializer.validated_data['user']
-            access_token = AccessToken.for_user(user)
-            response_data = {
-                'success': True,
-                'status': 200,
-                'message': 'Login successful',
-                'access_token': str(access_token),
-                'token_type': 'Bearer',
-                'expires_in': access_token.lifetime.total_seconds(),
-            }
-            return Response(response_data, status=status.HTTP_200_OK)
+            refresh = RefreshToken.for_user(user)
+            access = refresh.access_token
+            return Response(
+                {
+                    "success": True,
+                    "status": 200,
+                    "message": "Login successful",
+                    "access_token": str(access),
+                    "refresh_token": str(refresh),
+                    "token_type": "Bearer",
+                    "expires_in": access.lifetime.total_seconds()
+                },
+                status=status.HTTP_200_OK
+            )
         except ValidationError as e:
             general_logger.error("Validation error: %s", e)
-            response_data = {
-                "success": False,
-                "status": 400,
-                "error": f"Validation error: {e}",
-            }
-            return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except Exception as e:
             general_logger.error("Exception error: %s", e)
-            response_data = {
-                "success": False,
-                "status": 500,
-                "error": "An error occured: Contact support",
-            }
-            return Response(response_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-    # ---- Google login ---- #
-    @swagger_auto_schema(responses={200: 'OK', 500: 'SERVER ERROR'})
-    def google_login(self, request):
-        """
-        Google login endpoint
-
-        Redirects to Google OAuth2 login page.
-        """
-        try:
-            google_login_url = (
-                f"https://accounts.google.com/o/oauth2/auth"
-                f"?client_id={settings.SOCIALACCOUNT_PROVIDERS['google']['APP']['client_id']}"
-                f"&redirect_uri={settings.GOOGLE_REDIRECT_URI}"
-                f"&response_type=code"
-                f"&scope=email%20profile"
+            return Response(
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-            return redirect(google_login_url)
-        except Exception as e:
-            general_logger.error("An error occurred: %s", e, exc_info=True)
-            response_data = {
-                'success': False,
-                'status': 500,
-                'error': 'Server error: Please contact admin',
-            }
-            return Response(response_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-    # ---- Google Callback ---- #
-    @swagger_auto_schema(responses={200: 'OK', 400: 'BAD REQUEST', 500: 'SERVER ERROR'})
-    def google_callback(self, request):
+
+    # ---- Refresh Access Token ---- #
+    @extend_schema(request=RefreshTokenSerializer)
+    @action(detail=False, methods=['post'], throttle_classes=[AnonRateThrottle])
+    def refresh(self, request):
         """
-        Google callback endpoint
-        
-        Handles the callback from Google after user authentication.
+        Token refresh endpoint
+
+        Accepts a valid refresh token and returns a new access token.
         """
+        serializer = RefreshTokenSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "status": 400, "error": "Invalid refresh token format"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
-            code = request.GET.get('code')
-            if not code:
-                general_logger.error("An error occurred: Code parameter is missing")
-                response_data = {
-                    'success': False,
-                    'status': 400,
-                    'error': 'Google auth error: Please contact admin',
-                }
-                return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
-
-            # Exchange authorization code for access token
-            token_url = "https://oauth2.googleapis.com/token"
-            token_data = {
-                'code': code,
-                'client_id': settings.SOCIALACCOUNT_PROVIDERS['google']['APP']['client_id'],
-                'client_secret': settings.SOCIALACCOUNT_PROVIDERS['google']['APP']['secret'],
-                'redirect_uri': settings.GOOGLE_REDIRECT_URI,
-                'grant_type': 'authorization_code'
-            }
-            token_response = requests.post(token_url, data=token_data)
-            token_json = token_response.json()
-
-            if 'access_token' not in token_json:
-                general_logger.error("An error occurred: Failed to retrieve access token")
-                response_data = {
-                    'success': False,
-                    'status': 400,
-                    'error': 'OAuth2 token error: Please contact admin',
-                }
-                return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
-
-            access_token = token_json['access_token']
-
-            # Fetch user info from Google API
-            user_info_url = "https://www.googleapis.com/oauth2/v2/userinfo"
-            user_info_response = requests.get(user_info_url, headers={'Authorization': f'Bearer {access_token}'}).json()
-            
-            email = user_info_response.get('email')
-            first_name = user_info_response.get('given_name', '')
-            last_name = user_info_response.get('family_name', '')
-
-            # Check if user exists in the database
-            user = User.objects.filter(email=email).first()
-            if not user:
-                user = User.objects.create(email=email, first_name=first_name, last_name=last_name)
-                # Generate a secure random password (hashed)
-                random_password = User.objects.make_random_password()
-                user.set_password(random_password)  # Set hashed password
-                user.is_tenant = True  # Set user as tenant
-                user.is_verified = True # Set user as verified
-                user.save()
-
-            # Generate JWT access token
-            access_token = AccessToken.for_user(user)
-            response_data = {
-                'success': True,
-                'status': 200,
-                'message': 'Successfully logged in with Google',
-                'access_token': str(access_token),
-                'token_type': 'Bearer',
-                'expires_in': access_token.lifetime.total_seconds(),
-            }
-            return Response(response_data, status=status.HTTP_200_OK)
+            refresh = RefreshToken(serializer.validated_data['refresh'])
+            access = refresh.access_token
+            return Response(
+                {
+                    "success": True,
+                    "status": 200,
+                    "message": "Token refreshed successfully",
+                    "access_token": str(access),
+                    "token_type": "Bearer",
+                    "expires_in": access.lifetime.total_seconds(),
+                },
+                status=status.HTTP_200_OK,
+            )
+        except TokenError as e:
+            general_logger.warning("Token error during refresh: %s", e)
+            return Response(
+                {"success": False, "status": 401, "error": "Invalid or expired refresh token"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
         except Exception as e:
-            general_logger.error("An error occurred: %s", e, exc_info=True)
-            response_data = {
-                'success': False,
-                'status': 500,
-                'error': 'Server error: Please contact admin',
-            }
-            return Response(response_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-    # ---- Logout ---- #
-    @swagger_auto_schema(responses={205: 'RESET CONTENT', 400: 'BAD REQUEST', 500: 'SERVER ERROR'})
+            general_logger.error("Exception error during refresh: %s", e)
+            return Response(
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    # # ---- Logout ---- #
+    @extend_schema(request=RefreshTokenSerializer)
     def logout(self, request):
         """
         User logout endpoint
 
-        Blacklists the access token.
+        Blacklists both the access token and the refresh token.
         """
+        serializer = RefreshTokenSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "status": 400, "error": "Invalid refresh token format"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
-            token = request.auth
-            if token:
-                jti = token['jti']
-                
-                # Get current timestamp and token expiration
-                current_time = int(time.time())
-                expiration_time = token.payload['exp']
-                
-                # Get remaining token lifetime (in seconds)
-                remaining_time = expiration_time - current_time
-                
-                # Only blacklist token in Redis with expiration if token hasn't expired
-                if remaining_time > 0:
-                    cache_key = CustomJWTAuthentication.get_cache_key(self, jti)
-                    cache.set(cache_key, 'blacklisted', timeout=int(remaining_time))
-                response_data = {
-                    'success': True,
-                    'status': 205,
-                    'message': 'Successfully logged out.',
-                }
-                return Response(response_data, status=status.HTTP_205_RESET_CONTENT)
-            else:
-                response_data = {
-                    'success': False,
-                    'status': 400,
-                    'message': 'Token is invalid or expired',
-                }
-                return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
+            # --- Blacklist the refresh token ---
+            try:
+                refresh = RefreshToken(serializer.validated_data['refresh'])
+                CustomJWTAuthentication.blacklist_token(jti=refresh.payload['jti'], exp=refresh.payload['exp'])
+            except TokenError as e:
+                general_logger.warning("Refresh token invalid during logout (ignoring): %s", e)
+            # --- Blacklist the access token ---
+            access_token = request.auth
+            if access_token:
+                CustomJWTAuthentication.blacklist_token(jti=access_token['jti'], exp=access_token.payload['exp'])
+            return Response(
+                {"success": True, "status": 200, "message": "Successfully logged out."},
+                status=status.HTTP_200_OK,
+            )
         except Exception as e:
-            general_logger.error("Exception error: %s", e)
-            response_data = {
-                "success": False,
-                "status": 500,
-                "error": "An error occured: Contact support",
-            }
-            return Response(response_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            general_logger.error("Exception error during logout: %s", e)
+            return Response(
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
     # ---- Password Reset ---- #
+    @extend_schema(request=ResetPasswordSerializer)
     @action(detail=False, methods=['post'], throttle_classes=[AnonRateThrottle])
-    @swagger_auto_schema(request_body=ResetPasswordSerializer, responses={200: 'OK', 400: 'BAD REQUEST', 500:'SERVER ERROR'})
     def reset_password(self, request):
         """
         User reset password endpoint
@@ -421,69 +286,30 @@ class AuthViewSet(viewsets.ViewSet):
             else:
                 token = PasswordResetToken.generate_token()
                 PasswordResetToken.objects.create(user=user, token=token)
-            email_subject = 'App Name: Password Reset Request'
-            email_body = f"""
-            <html>
-            <body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4;">
-                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f4f4f4;">
-                    <tr>
-                        <td align="center" style="padding: 20px;">
-                            <!-- Card Container -->
-                            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);">
-                                <tr>
-                                    <td style="padding: 20px;">
-                                        <!-- Content -->
-                                        <p style="font-size: 16px; color: #333333; margin: 0 0 20px 0;">Dear <strong>{user}</strong>,</p>
-                                        <p style="font-size: 16px; color: #333333; margin: 0 0 20px 0;">You have requested a password reset. Use the following token to reset your password within the next <strong>10 minutes</strong> before it expires:</p>
-                                        <table cellpadding="0" cellspacing="0" border="0" align="center">
-                                            <tr>
-                                                <td align="center">
-                                                    <label style="background-color: #4CAF50; color: white; padding: 10px 30px; text-align: center; display: inline-block; font-size: 24px; font-style: bold;">
-                                                        {token}
-                                                    </label>
-                                                </td>
-                                            </tr>
-                                        </table>
-                                        <p style="font-size: 16px; color: #FF0000; margin: 20px 0 20px 0;">If you didn't request this, please ignore this email or contact support.</p>
-
-                                        <p style="font-size: 16px; color: #333333; margin: 0;">Regards,<br><a href="https://appname.com.ng" style="font-style: bold; text-decoration: none;">App Name</a></p>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-                </table>
-            </body>
-            </html>
-            """
+            email_subject = 'DwellingBloom App Support: Password Reset Request'
+            email_body = reset_password_email_template(user, token)
             recipient = [user.email]
             # Asynchronously handle send mail
-            Thread(target=send_async_email, args=(email_subject, email_body, recipient)).start()
-            response_data = {
-                'success': True,
-                'status': 200,
-                'message': 'OTP sent to email.',
-            }
-            return Response(response_data, status=status.HTTP_200_OK)
+            send_email_task.delay(email_subject, email_body, recipient)
+            return Response(
+                {'success': True, 'status': 200, 'message': 'OTP sent to email.'},
+                status=status.HTTP_200_OK
+            )
         except ValidationError as e:
             general_logger.error("Validation error: %s", e)
-            response_data = {
-                "success": False,
-                "status": 400,
-                "error": f"Validation error: {e}",
-            }
-            return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
             general_logger.error("Exception error: %s", e)
-            response_data = {
-                "success": False,
-                "status": 500,
-                "error": "An error occured: Contact support",
-            }
-            return Response(response_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"success": False, "status": 500, "error": "An error occured: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
         
     # ---- Update Password ---- #
-    @swagger_auto_schema(request_body=UpdatePasswordSerializer, responses={200: 'OK', 400: 'BAD REQUEST', 500:'SERVER ERROR'})
+    @extend_schema(request=UpdatePasswordSerializer)
     def confirm_reset_password(self, request):
         """
         User update password endpoint
@@ -494,70 +320,60 @@ class AuthViewSet(viewsets.ViewSet):
         try:
             serializer.is_valid(raise_exception=True)
             serializer.save()
-            response = {
-                "success": True,
-                "status": 200,
-                "message": "Password updated successfully.",
-            }
-            return Response(response, status=status.HTTP_200_OK)
+            return Response(
+                {"success": True, "status": 200, "message": "Password updated successfully."},
+                status=status.HTTP_200_OK
+            )
         except ValidationError as e:
             general_logger.error("Validation error: %s", e)
-            response = {
-                "success": False,
-                "status": 400,
-                "error": f"Validation error: {e}",
-            }
-            return Response(response, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
             general_logger.error("Exception error: %s", e)
-            response = {
-                "success": False,
-                "status": 500,
-                "error": "An error occured: Contact support",
-            }
-            return Response(response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            return Response(
+                {"success": False, "status": 500, "error": "An error occured: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 
 class UserViewSet(viewsets.ViewSet):
     """
     Handles user profiles (CRUD) and admin actions.
     """
+    serializer_class = None  # Set in each action
+
     # ---- Permissions ---- #
     def get_permissions(self):
         if self.action in ['me', 'profile_update']:
             return [permissions.IsAuthenticated()]
         else:
             return [permissions.IsAdminUser()]
-        
+
     # ---- View Profile ---- #
-    @swagger_auto_schema(responses={200: 'OK', 401: 'UNAUTHORIZED'})
+    @extend_schema(tags=['Users'])
     def me(self, request):
         """
         Current user's profile endpoint
 
         Gets the profile of the authenticated user.
-        Returns user data if authenticated, otherwise returns an error.
         """
         try:
             serializer = ProfileSerializer(request.user)
-            response_data = {
-                    'success': True,
-                    'status': 200,
-                    'message': 'User profile retrieved successfully',
-                    'data': serializer.data
-                }
-            return Response(response_data, status=status.HTTP_200_OK)
+            return Response(
+                {'success': True, 'status': 200, 'message': 'User profile retrieved successfully', 'data': serializer.data},
+                status=status.HTTP_200_OK
+            )
         except Exception as e:
             general_logger.error("Exception error: %s", e)
-            response_data = {
-                "success": False,
-                "status": 401,
-                "error": "Unauthorized access",
-            }
-            return Response(response_data, status=status.HTTP_401_UNAUTHORIZED)
-        
+            return Response(
+                {"success": False, "status": 401, "error": "Unauthorized access"},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
     # ---- Update Profile ---- #
-    @swagger_auto_schema(request_body=ProfileSerializer, responses={200: 'OK', 400: 'BAD REQUEST', 500:'SERVER ERROR'})
+    @extend_schema(request=ProfileSerializer, tags=['Users'])
     def profile_update(self, request):
         """
         Update user profile endpoint
@@ -569,58 +385,76 @@ class UserViewSet(viewsets.ViewSet):
             serializer = ProfileSerializer(user, data=self.request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             serializer.save()
-            response_data = {
-                'success': True,
-                'status': 200,
-                'message': 'Profile updated successfully',
-                'data': serializer.data
-            }
-            return Response(response_data, status=status.HTTP_200_OK)
+            return Response(
+                {'success': True, 'status': 200, 'message': 'Profile updated successfully', 'data': serializer.data},
+                status=status.HTTP_200_OK
+            )
         except ValidationError as e:
             general_logger.error("Validation error: %s", e)
-            response_data = {
-                "success": False,
-                "status": 400,
-                "error": f"Validation error: {e}",
-            }
-            return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
             general_logger.error("Exception error: %s", e)
-            response_data = {
-                "success": False,
-                "status": 500,
-                "error": "An error occured: Contact support",
-            }
-            return Response(response_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            return Response(
+                {"success": False, "status": 500, "error": "An error occured: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     # ---- Admin Actions ---- #
-    @swagger_auto_schema(responses={200: 'OK', 400: 'BAD REQUEST', 500:'SERVER ERROR'})
+    @extend_schema(
+        operation_id='admin_users_list',
+        parameters=[
+            OpenApiParameter(name='search', description='Search by email, first name, or last name', required=False, type=str),
+            OpenApiParameter(name='page', description='Page number', required=False, type=int),
+            OpenApiParameter(name='page_size', description='Results per page (max 100)', required=False, type=int),
+        ],
+        tags=['Admin']
+    )
     def list(self, request):
         """
         List users endpoint
 
         Admin lists all registered users.
+        Supports search by email, first name, or last name via ?search=
+        Supports pagination via ?page= and ?page_size=
         """
         try:
-            users = User.objects.all()
-            serializer = AdminUserSerializer(users, many=True)
-            response_data = {
-                'success': True,
-                'status': 200,
-                'message': 'Users listed successfully',
-                'data': serializer.data
-            }
-            return Response(response_data, status=status.HTTP_200_OK)
+            search_query = request.query_params.get('search', '').strip()
+            users = User.objects.all().order_by('id')
+            if search_query:
+                users = users.filter(
+                    Q(email__icontains=search_query) | Q(first_name__icontains=search_query) | Q(last_name__icontains=search_query)
+                )
+            # --- Paginate ---
+            paginator = ListPagination()
+            paginated_users = paginator.paginate_queryset(users, request)
+            serializer = AdminUserSerializer(paginated_users, many=True)
+            return Response(
+                {
+                    "success": True,
+                    "status": 200,
+                    "message": "Users listed successfully",
+                    "pagination": {
+                        "total":    paginator.page.paginator.count,
+                        "page":     paginator.page.number,
+                        "pages":    paginator.page.paginator.num_pages,
+                        "has_next": paginator.page.has_next(),
+                        "has_prev": paginator.page.has_previous(),
+                    },
+                    "data": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
         except Exception as e:
             general_logger.error("Exception error: %s", e)
-            response_data = {
-                "success": False,
-                "status": 500,
-                "error": "An error occured: Contact support",
-            }
-            return Response(response_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-    @swagger_auto_schema(responses={200: 'OK', 404: 'NOT FOUND', 500:'SERVER ERROR'})
+            return Response(
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @extend_schema(operation_id='admin_users_retrieve', tags=['Admin'])
     def retrieve(self, request, pk=None):
         """
         Retrieve user endpoint
@@ -630,31 +464,24 @@ class UserViewSet(viewsets.ViewSet):
         try:
             user = get_object_or_404(User, id=pk)
             serializer = AdminUserSerializer(user)
-            response_data = {
-                'success': True,
-                'status': 200,
-                'message': 'User retrieved successfully',
-                'data': serializer.data
-            }
-            return Response(response_data, status=status.HTTP_200_OK)
+            return Response(
+                {"success": True, "status": 200, "message": "User retrieved successfully", "data": serializer.data},
+                status=status.HTTP_200_OK
+            )
         except User.DoesNotExist:
             general_logger.error("User not found: %s", pk)
-            response_data = {
-                "success": False,
-                "status": 404,
-                "error": "User not found.",
-            }
-            return Response(response_data, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"success": False, "status": 404, "error": "User not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
         except Exception as e:
             general_logger.error("Exception error: %s", e)
-            response_data = {
-                "success": False,
-                "status": 500,
-                "error": "An error occured: Contact support",
-            }
-            return Response(response_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-    @swagger_auto_schema(responses={204: 'NO CONTENT', 404: 'NOT FOUND', 500:'SERVER ERROR'})
+            return Response(
+                {"success": False, "status": 500, "error": "An error occured: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @extend_schema(tags=['Admin'])
     def destroy(self, request, pk=None):
         """
         Deleter user endpoint
@@ -664,26 +491,19 @@ class UserViewSet(viewsets.ViewSet):
         try:
             user = get_object_or_404(User, id=pk)
             user.delete()
-            response_data = {
-                'success': True,
-                'status': 200,
-                'message': 'User deleted successfully',
-            }
-            return Response(response_data, status=status.HTTP_204_NO_CONTENT)
+            return Response(
+                {"success": True, "status": 200, "message": "User deleted successfully"},
+                status=status.HTTP_200_OK
+            )
         except User.DoesNotExist:
             general_logger.error("User not found: %s", pk)
-            response_data = {
-                "success": False,
-                "status": 404,
-                "error": "User not found.",
-            }
-            return Response(response_data, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"success": False, "status": 404, "error": "User not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
         except Exception as e:
             general_logger.error("Exception error: %s", e)
-            response_data = {
-                "success": False,
-                "status": 500,
-                "error": "An error occured: Contact support",
-            }
-            return Response(response_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            return Response(
+                {"success": False, "status": 500, "error": "An error occured: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

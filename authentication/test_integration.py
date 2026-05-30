@@ -25,7 +25,7 @@ class UserManagementTests(APITestCase):
     def test_user_signup(self):
         url = reverse('signup')
         data = {
-            'email': 'newser@example.com',
+            'email': 'newuser@example.com',
             'password': 'st@ng8Te',
             'confirm_password': 'st@ng8Te',
             'first_name': 'New',
@@ -34,7 +34,7 @@ class UserManagementTests(APITestCase):
         }
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertFalse(UserModel.objects.filter(email='newuser@example.com').exists())
+        self.assertTrue(UserModel.objects.filter(email='newuser@example.com').exists())
 
 
     def test_verify_email(self):

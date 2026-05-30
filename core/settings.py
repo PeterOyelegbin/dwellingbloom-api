@@ -13,7 +13,9 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
-import os, logging.config
+import logging.config
+
+import django
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,12 +25,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='django-insecure$@djfjrjewiiid')
+SECRET_KEY = config('SECRET_KEY')
+
+# Guard against short key at startup
+if len(SECRET_KEY.encode()) < 32:
+    raise ValueError("SECRET_KEY must be at least 32 bytes long")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', cast=bool, default=True)
 
 ALLOWED_HOSTS = ['127.0.0.1', 'dwellingbloomapi.onrender.com']
+
+# CORS_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173", "https://dwellingbloom.netlify.app"]
+
+CSRF_TRUSTED_ORIGINS = ['http://*', 'https://*', 'https://dwellingbloom.netlify.app']
+
+CORS_ALLOW_ALL_ORIGINS = True
 
 
 # Application definition
@@ -40,16 +52,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
+
     # 3rd-party libraries
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
-    'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
-    'allauth.socialaccount.providers.google',
+    'drf_spectacular',
     'corsheaders',
-    'drf_yasg',
 
     # Local apps
     'authentication',
@@ -64,7 +72,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'allauth.account.middleware.AccountMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
@@ -94,22 +101,23 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
 
 DATABASES = {
-    # 'default': {
-    #     'ENGINE': 'django.db.backends.sqlite3',
-    #     'NAME': BASE_DIR / 'db.sqlite3',
-    # }
-
-    # Production db
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
+        # # Test with SQLite for simplicity, switch to MySQL for production
+        # 'ENGINE': 'django.db.backends.sqlite3',
+        # 'NAME': BASE_DIR / 'db.sqlite3',
+
+        # PostgreSQL configuration for production
+        'ENGINE': 'django.db.backends.postgresql',
         'HOST': config('DB_HOST'),
         'PORT': config('DB_PORT'),
         'NAME': config('DB_NAME'),
         'USER': config('DB_USER'),
         'PASSWORD': config('DB_PASS'),
-        'OPTIONS': {
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-        },
+
+        # # Add to above for MySQL configuration
+        # 'OPTIONS': {
+        #     'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        # },
     }
 }
 
@@ -166,17 +174,8 @@ ACCOUNT_EMAIL_REQUIRED = True  # Email is required
 ACCOUNT_UNIQUE_EMAIL = True  # Email must be unique
 ACCOUNT_USERNAME_REQUIRED = False  # No username is required
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None  # No username field in the user model
-AUTHENTICATION_BACKENDS = ('allauth.account.auth_backends.AuthenticationBackend',)
 
 SITE_ID = 1
-
-
-# cors policy config
-# CORS_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173", "https://dwellingbloom.netlify.app"]
-
-CSRF_TRUSTED_ORIGINS = ['http://*', 'https://*', 'https://dwellingbloom.netlify.app']
-
-CORS_ALLOW_ALL_ORIGINS = True
 
 
 # static files config
@@ -184,11 +183,38 @@ STATIC_ROOT = BASE_DIR/'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 
+# DRF-Spectacular config
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Dwelling Bloom API',
+    'DESCRIPTION': 'Dwelling Bloom is a real estate platform designed to simplify the process of renting or buying properties in Nigeria eliminating the fraudulent agent and uneccessary fees. This API provides the backend infrastructure necessary for user authentication, property management, interaction with a database of available properties, and payment.',
+    'VERSION': '1.0.0',
+    'CONTACT': {'name': 'Peter Oyelegbin', 'url': 'https://peteroyelegbin.com.ng', 'email': 'peteroyelegbin@gmail.com'},
+    'LICENSE': {'name': 'MIT License', 'url': 'https://opensource.org/licenses/MIT'},
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENTS': {
+        'securitySchemes': {
+            'Bearer': {
+                'type': 'http',
+                'scheme': 'bearer',
+                'bearerFormat': 'JWT',
+            }
+        }
+    },
+    'SECURITY': [{'Bearer': []}],
+    'TAGS': [
+        {'name': 'Auth',  'description': 'Authentication endpoints'},
+        {'name': 'Users', 'description': 'User profile endpoints'},
+        {'name': 'Admin', 'description': 'Admin management endpoints'},
+    ],
+}
+
+
 # Rest framework config
 REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_AUTHENTICATION_CLASSES': [
         # 'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'utils.CustomJWTAuthentication',
+        'utils.jwt_config.CustomJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -202,10 +228,9 @@ REST_FRAMEWORK = {
 
 # JWT config
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=10),  # Shorter for security
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(config('ACCESS_TOKEN_EXPIRE_MINUTES'))),  # Shorter for security
 
-    # No refresh tokens as per requirements
-    'REFRESH_TOKEN_LIFETIME': None,
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(config('REFRESH_TOKEN_EXPIRE_DAYS'))),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': True,                # Prevent token reuse
     'UPDATE_LAST_LOGIN': True,
@@ -219,8 +244,8 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
-    
-     # Token identification
+
+    # Token identification
     'JTI_CLAIM': 'jti',                              # This is crucial for blacklisting
 
     # Token class
@@ -231,42 +256,21 @@ SIMPLE_JWT = {
 }
 
 
-# OAuth config
-SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        'SCOPE': [
-            'profile',
-            'email',
-        ],
-        'AUTH_PARAMS': {
-            'access_type': 'offline',
-        },
-        'APP': {
-            'client_id': config('GOOGLE_CLIENT_ID', default='9254637XXXXXXXontent.com'),
-            'secret': config('GOOGLE_SECRET_KEY', default='GOCSPX-sTDK7yXXXXXXM4oucQEj'),
-            'key': ''
+# Cache config
+CACHES = {
+    # 'default': {
+    #     'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    #     'LOCATION': 'unique-snowflake',
+    # }
+
+    # Add Redis configuration for production
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': config("REDIS_URL"),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         }
     }
-}
-
-GOOGLE_REDIRECT_URI = config('GOOGLE_REDIRECT_URI', default='http://localhost:3000/auth/google/callback')
-
-
-# Blacklist config storage
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-snowflake',
-    }
-
-    # # Add Redis configuration for production
-    # 'default': {
-    #     'BACKEND': 'django_redis.cache.RedisCache',
-    #     'LOCATION': 'redis://127.0.0.1:6379/1',
-    #     'OPTIONS': {
-    #         'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-    #     }
-    # }
 }
 
 # Use Redis as session backend (optional but recommended)
@@ -274,19 +278,29 @@ SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 SESSION_CACHE_ALIAS = "default"
 
 
+# Celery Config
+CELERY_TIMEZONE = "Nigeria/Lagos"
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
+CELERY_BROKER_URL = config("REDIS_URL")
+CELERY_RESULT_BACKEND = config("REDIS_URL")
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+
+
 FRONTEND_URL = "http://127.0.0.1:8000/api/v1/auth"
 
 
 # Email config
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = config("EMAIL_HOST", default='smtp.gmail.com')
-EMAIL_PORT = config("EMAIL_PORT", default=465)
-DEFAULT_FROM_EMAIL = config("EMAIL_HOST_USER", default='example@gmail.com')
-EMAIL_HOST_USER = config("EMAIL_HOST_USER", default='example@gmail.com')
-EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default='your_password')
-EMAIL_USE_TLS = False
-EMAIL_USE_SSL = True
-EMAIL_TIMEOUT = 3600  # 3600 sec
+EMAIL_HOST = config("EMAIL_HOST")
+EMAIL_PORT = config("EMAIL_PORT")
+DEFAULT_FROM_EMAIL = config("EMAIL_HOST_USER")
+EMAIL_HOST_USER = config("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool, default=False)
+EMAIL_USE_SSL = config("EMAIL_USE_SSL", cast=bool, default=False)
+EMAIL_TIMEOUT = 30  # 30 sec
 
 
 # Logging config

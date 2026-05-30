@@ -10,6 +10,7 @@ class SignupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserModel
+        # fields = "__all__"
         fields = ('id', 'first_name', 'last_name', 'email', 'password', 'confirm_password', 'phone_number', 'role', 'bvn', 'account_number', 'account_name', 'bank_name')
         extra_kwargs = {
             'id': {'read_only': True},
@@ -25,12 +26,12 @@ class SignupSerializer(serializers.ModelSerializer):
         if password != confirm_password:
             raise serializers.ValidationError("Passwords do not match.")
         return attrs
-    
+
     def create(self, validated_data):
         validated_data.pop('confirm_password', None)
         user = UserModel.objects.create_user(**validated_data)
         return user
-    
+
 
 class ResendActivationEmailSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -46,7 +47,7 @@ class ResendActivationEmailSerializer(serializers.Serializer):
             raise serializers.ValidationError("User is not active.")
         attrs['user'] = user
         return attrs
-    
+
 
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -64,7 +65,11 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError("Account is inactive, contact support.")
         attrs['user'] = user
         return attrs
-        
+
+
+class RefreshTokenSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
+
 
 class ResetPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -78,7 +83,7 @@ class ResetPasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError("Account not eligible for password reset.")
         attrs['user'] = user
         return attrs
-    
+
 
 class UpdatePasswordSerializer(serializers.Serializer):
     otp = serializers.CharField()
@@ -97,7 +102,7 @@ class UpdatePasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError("Passwords do not match.")
         attrs['reset_token'] = reset_token  # Pass token to view if needed
         return attrs
-    
+
     def save(self, **kwargs):
         reset_token = self.validated_data['reset_token']
         user = reset_token.user
@@ -105,14 +110,14 @@ class UpdatePasswordSerializer(serializers.Serializer):
         user.save()
         reset_token.delete()
         return user
-    
+
 
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserModel
         fields = ('id', 'first_name', 'last_name', 'email', 'phone_number', 'role', 'bvn', 'account_number', 'account_name', 'bank_name')
         read_only_fields = ['id', 'first_name', 'last_name', 'email', 'role', 'bvn']
-        
+
 
 class AdminUserSerializer(serializers.ModelSerializer):
     class Meta:

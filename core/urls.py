@@ -15,32 +15,17 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework import permissions
-from drf_yasg.views import get_schema_view
-from drf_yasg import openapi
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 import authentication.urls#, properties.urls
-
-# Swagger UI
-schema_view = get_schema_view(
-   openapi.Info(
-      title="Dwelling Bloom API",
-      default_version='v1',
-      description="Dwelling Bloom is a real estate platform designed to simplify the process of renting or buying properties in Nigeria eliminating the fraudulent agent and uneccessary fees. This API provides the backend infrastructure necessary for user authentication, property management, interaction with a database of available properties, and payment.",
-      terms_of_service="https://www.google.com/policies/terms/",
-      contact=openapi.Contact(name="Peter Oyelegbin", url="https://peteroyelegbin.com.ng", email="info@peteroyelegbin.com.ng"),
-      license=openapi.License(name="MIT License"),
-   ),
-   public=True,
-   permission_classes=(permissions.AllowAny,),
-)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    
-    # API DOCS URL
-    path('docs/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
-    path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
-    
+
+    # DRF Spectacular API schema and documentation URLs
+    path('schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+
     # API URLS
     path('api/v1/', include(authentication.urls)),
     # path('api/v1/', include(properties.urls)),
