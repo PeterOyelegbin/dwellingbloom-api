@@ -13,9 +13,8 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
-import logging.config
+import os, logging.config
 
-import django
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -304,6 +303,33 @@ EMAIL_TIMEOUT = 30  # 30 sec
 
 
 # Logging config
+IS_VERCEL = os.environ.get("VERCEL") is not None
+
+if IS_VERCEL:
+    general_handler = {
+        "level": "INFO",
+        "class": "logging.StreamHandler",
+        "formatter": "verbose",
+    }
+    email_handler = {
+        "level": "ERROR",
+        "class": "logging.StreamHandler",
+        "formatter": "verbose",
+    }
+else:
+    general_handler = {
+        "level": "INFO",
+        "class": "logging.FileHandler",
+        "filename": "general.log",
+        "formatter": "verbose",
+    }
+    email_handler = {
+        "level": "ERROR",
+        "class": "logging.FileHandler",
+        "filename": "email_errors.log",
+        "formatter": "verbose",
+    }
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -318,18 +344,8 @@ LOGGING = {
         },
     },
     'handlers': {
-        'file_general': {
-            'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': 'general.log',
-            'formatter': 'verbose',
-        },
-        'file_email': {
-            'level': 'ERROR',
-            'class': 'logging.FileHandler',
-            'filename': 'email_errors.log',
-            'formatter': 'verbose',
-        },
+        'file_general': general_handler,
+        'file_email': email_handler,
     },
     'loggers': {
         'django': {
