@@ -20,7 +20,6 @@ class SignupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserModel
-        # fields = "__all__"
         fields = ('id', 'first_name', 'last_name', 'email', 'password', 'confirm_password', 'phone_number', 'role', 'bvn', 'account_number', 'account_name', 'bank_name')
         extra_kwargs = {
             'id': {'read_only': True},

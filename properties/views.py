@@ -1,218 +1,224 @@
-from django.shortcuts import render
-from rest_framework import viewsets, status, filters
-from rest_framework.decorators import action
+from rest_framework import viewsets, status, permissions
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
-# from django_filters.rest_framework import DjangoFilterBackend
-from drf_yasg.utils import swagger_auto_schema
-from utils import CustomJWTAuthentication, send_async_email, cache, general_logger, bvn_verification, generate_email_activation_link, verify_email_activation_link
+from rest_framework.exceptions import ValidationError
+from django.db.models import Q
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from utils.logger_config import general_logger
+from utils.page_config import ListPagination
 from .models import Apartment
-from .serializers import ApartmentSerializer, ApartmentSearchSerializer
+from .serializers import *
 
 # Create your views here.
+@extend_schema(tags=['Apartment'])
 class ApartmentViewSet(viewsets.ViewSet):
     """
     Apartment Management Endpoint
 
     A viewset for adding, viewing, updating, and deleting apartment instances."
     """
-    queryset = Apartment.objects.get()
     serializer_class = ApartmentSerializer
-    permission_classes = [IsAuthenticated]
-    # filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    # search_fields = ["name", "city", "state"]
-    # ordering_fields = ["bedrooms", "created_at",]
-    # ordering = ["-created_at"]
-    
-    # @action(detail=False, methods=["post"], serializer_class=ApartmentSearchSerializer)
-    # def search(self, request):
-    #     serializer = ApartmentSearchSerializer(data=request.data)
-    #     serializer.is_valid(raise_exception=True)
-    #     data = serializer.validated_data
+    parser_classes   = [MultiPartParser, FormParser, JSONParser]
 
-    #     queryset = self.get_queryset()
+    def get_permissions(self):
+        if self.action in ['list']:
+            return [permissions.AllowAny()]
+        elif self.action in ['destroy']:
+            return [permissions.IsAdminUser()]
+        else:
+            return [permissions.IsAuthenticated()]
 
-    #     if "city" in data:
-    #         queryset = queryset.filter(city__icontains=data["city"])
-
-    #     if "bedrooms" in data:
-    #         queryset = queryset.filter(bedrooms=data["bedrooms"])
-
-    #     page = self.paginate_queryset(queryset)
-    #     if page is not None:
-    #         serializer = self.get_serializer(page, many=True)
-    #         return self.get_paginated_response(serializer.data)
-
-    #     serializer = self.get_serializer(queryset, many=True)
-    #     return Response(serializer.data)
-
-    @swagger_auto_schema(request_body=ApartmentSerializer, responses={201: 'CREATED', 400: 'BAD REQUEST', 403: 'FORBIDDEN'})
+    @extend_schema(request={'multipart/form-data': ApartmentSerializer})
     def create(self, request):
-        serializer = self.serializer_class(data=request.data)
+        """
+        Create an apartment endpoint.
+
+        Owners only. Accepts multipart/form-data to support image uploads.
+        """
+        if request.user.role != 'OWNER':
+            return Response(
+                {'success': False, 'status': 403, 'message': 'Permission denied!'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        serializer = self.serializer_class(data=request.data, context={'request': request})
         try:
-            if not request.user.is_owner:
-                response_data = {
-                    'success': False,
-                    'status': 403,
-                    'message': 'Permission denied!',
-                }
-                return Response(response_data, status=status.HTTP_403_FORBIDDEN)
             serializer.is_valid(raise_exception=True)
-            serializer.save(owner=request.user.id)
-            response_data = {
-                'success': True,
-                'status': 201,
-                'message': 'Appartment created successfully',
-                'data': serializer.data,
-            }
-            return Response(response_data, status=status.HTTP_201_CREATED)
+            serializer.save(owner=request.user)
+            return Response(
+                {'success': True, 'status': 201, 'message': 'Apartment created successfully', 'data': serializer.data},
+                status=status.HTTP_201_CREATED
+            )
+        except ValidationError as e:
+            general_logger.error("Validation error creating apartment: %s", e)
+            return Response(
+                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except Exception as e:
-            general_logger.error("An error occurred: %s", e)
-            response_data = {
-                "success": False,
-                "status": 400,
-                "error": "Validation error: Apartment could not be created."
-            }
-            return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
-        
-    @swagger_auto_schema(responses={200: 'OK', 400: 'BAD REQUEST'})
+            general_logger.error("Exception error creating apartment: %s", e)
+            return Response(
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(name='search', type=str, description='Search by city'),
+            OpenApiParameter(name='page', type=int, description='Page number'),
+            OpenApiParameter(name='page_size', type=int, description='Results per page (max 100)'),
+        ],
+    )
     def list(self, request):
+        """
+        List apartments endpoint.
+
+        - Admins see all apartments.
+        - Owners see only their own apartments.
+        - Public users see only verified and available apartments.
+        Supports search by city via ?search=
+        Supports pagination via ?page= and ?page_size=
+        """
         try:
-            if request.user.is_owner:
-                queryset = Apartment.objects.filter(owner=request.user.id)
-                serializer = self.serializer_class(queryset, many=True)
-                response_data = {
-                    'success': True,
-                    'status': 200,
-                    'message': 'Appartment list retrieved successfully',
-                    'data': serializer.data,
-                }
-                return Response(response_data, status=status.HTTP_200_OK)
-            queryset = Apartment.objects.filter(is_available=True)
-            page = self.paginate_queryset(queryset)
-            serializer = self.serializer_class(page, many=True)
-            response_data = {
-                'success': True,
-                'status': 200,
-                'message': 'Appartment list retrieved successfully',
-                'data': self.get_paginated_response(serializer.data)
-            }
-            return Response(response_data, status=status.HTTP_200_OK)
-        except Exception as e:
-            general_logger.error("An error occurred: %s", e)
-            response_data = {
-                "success": False,
-                "status": 400,
-                "error": "An error occured: Apartment list could not be retrieved."
-            }
-            return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
-        
-    @swagger_auto_schema(responses={200: 'OK', 400: 'BAD REQUEST'})
-    def retrieve(self, request, pk):
-        try:
-            if request.user.is_owner:
-                queryset = Apartment.objects.filter(pk=pk, owner=request.user.id)
-                serializer = self.serializer_class(queryset, many=True)
-                response_data = {
-                    'success': True,
-                    'status': 200,
-                    'message': 'Appartment retrieved successfully',
-                    'data': serializer.data,
-                }
-                return Response(response_data, status=status.HTTP_200_OK)
-            queryset = Apartment.objects.filter(pk=pk, is_available=True)
-            page = self.paginate_queryset(queryset)
-            serializer = self.serializer_class(page, many=True)
-            response_data = {
-                'success': True,
-                'status': 200,
-                'message': 'Appartment retrieved successfully',
-                'data': self.get_paginated_response(serializer.data)
-            }
-            return Response(response_data, status=status.HTTP_200_OK)
-        except Exception as e:
-            general_logger.error("An error occurred: %s", e)
-            response_data = {
-                "success": False,
-                "status": 400,
-                "error": "An error occured: Apartment could not be retrieved."
-            }
-            return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
-        
-    @swagger_auto_schema(request_body=ApartmentSerializer, responses={200: 'OK', 400: 'BAD REQUEST'})
-    def update(self, request, pk):
-        try:
-            if request.user.is_owner:
-                queryset = Apartment.objects.filter(pk=pk, owner=request.user.id)
-                serializer = self.serializer_class(queryset, data=request.data, partial=True)
-                serializer.is_valid(raise_exception=True)
-                serializer.save()
-                response_data = {
-                    'success': True,
-                    'status': 200,
-                    'message': 'Appartment updated successfully',
-                    'data': serializer.data,
-                }
-                return Response(response_data, status=status.HTTP_200_OK)
-            elif request.user.is_admin:
-                queryset = Apartment.objects.filter(pk=pk)
-                serializer = self.serializer_class(queryset, data=request.data, partial=True)
-                serializer.is_valid(raise_exception=True)
-                serializer.save()
-                response_data = {
-                    'success': True,
-                    'status': 200,
-                    'message': 'Appartment updated successfully',
-                    'data': serializer.data,
-                }
-                return Response(response_data, status=status.HTTP_200_OK)
+            search_query = request.query_params.get('search', '').strip()
+            apartments = Apartment.objects.all().order_by('id')
+            if request.user.is_authenticated and request.user.is_staff:
+                pass
+            elif request.user.is_authenticated and request.user.role == 'OWNER':
+                apartments = apartments.filter(owner=request.user.id)
             else:
-                response_data = {
-                    'success': False,
-                    'status': 403,
-                    'message': 'Permisinon denied!'
-                }
-                return Response(response_data, status=status.HTTP_403_FORBIDDEN)
+                apartments = apartments.filter(is_verified=True, is_available=True)
+            if search_query:
+                apartments = apartments.filter(Q(name__icontains=search_query) | Q(city__icontains=search_query) | Q(state__icontains=search_query))
+            paginator = ListPagination()
+            paginated_apartments = paginator.paginate_queryset(apartments, request)
+            serializer = ApartmentSummarySerializer(paginated_apartments, many=True)
+            return Response(
+                {
+                    "success": True,
+                    "status": 200,
+                    "message": "Apartments listed successfully",
+                    "pagination": {
+                        "total":    paginator.page.paginator.count,
+                        "page":     paginator.page.number,
+                        "pages":    paginator.page.paginator.num_pages,
+                        "has_next": paginator.page.has_next(),
+                        "has_prev": paginator.page.has_previous(),
+                    },
+                    "data": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
         except Exception as e:
-            general_logger.error("An error occurred: %s", e)
-            response_data = {
-                "success": False,
-                "status": 400,
-                "error": "An error occured: Apartment could not be updated."
-            }
-            return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
-        
-    @swagger_auto_schema(responses={205: 'RESET CONTENT', 400: 'BAD REQUEST', 403: 'FORBIDDEN', 404: 'NOT FOUND'})
-    def destroy(self, request, pk):
+            general_logger.error("Exception error listing apartments: %s", e)
+            return Response(
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @extend_schema()
+    def retrieve(self, request, pk=None):
+        """
+        Retrieve an apartment endpoint.
+
+        Retrieves apartment data using apartment ID.
+        Owners can only retrieve their own apartments.
+        """
         try:
-            if not request.user.is_admin:
-                response_data = {
-                    'success': False,
-                    'status': 403,
-                    'message': 'Permission denied!',
-                }
-                return Response(response_data, status=status.HTTP_403_FORBIDDEN)
-            queryset = Apartment.objects.get(pk=pk)
-            queryset.delete()
-            response_data = {
-                'success': True,
-                'status': 205,
-                'message': 'Appartment deleted successfully',
-            }
-            return Response(response_data, status=status.HTTP_205_RESET_CONTENT)
+            # Build base filter
+            filters = {'id': pk}
+            # Owners are restricted to their own apartments
+            if request.user.is_authenticated and request.user.role == 'OWNER':
+                filters['owner'] = request.user.id
+            apartment = Apartment.objects.get(**filters)
+            serializer = self.serializer_class(apartment)
+            return Response(
+                { 'success': True, 'status': 200, 'message': 'Appartment retrieved successfully', 'data': serializer.data},
+                status=status.HTTP_200_OK
+            )
         except Apartment.DoesNotExist:
-            response_data = {
-                'success': False,
-                'status': 404,
-                'message': 'Apartment not found',
-            }
-            return Response(response_data, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"success": False, "status": 404, "error": "Apartment not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         except Exception as e:
-            general_logger.error("An error occurred: %s", e)
-            response_data = {
-                "success": False,
-                "status": 400,
-                "error": "An error occured: Apartment could not be deleted."
-            }
-            return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
-        
+            general_logger.error("Exception error retrieving apartment (pk=%s): %s", pk, e)
+            return Response(
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @extend_schema(request=OwnerApartmentUpdateSerializer)
+    def partial_update(self, request, pk=None):
+        try:
+            """
+            Update an apartment endpoint.
+
+            Owners can only update limited fields of their own apartments.
+            Admins can update any field of any apartment.
+            """
+            if request.user.is_staff:
+                apartment = Apartment.objects.get(id=pk)
+                serializer = AdminApartmentUpdateSerializer(apartment, data=request.data, partial=True)
+            elif request.user.role == 'OWNER':
+                apartment = Apartment.objects.get(id=pk, owner=request.user.id)
+                serializer = OwnerApartmentUpdateSerializer(apartment, data=request.data, partial=True)
+            else:
+                return Response(
+                    {"success": False, "status": 403, "error": "You do not have permission to update apartments."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            general_logger.info("This (data=%s) for apartment (pk=%s) was updated successfully by user (%s)", serializer.data, pk, request.user)
+            return Response(
+                {'success': True, 'status': 200, 'message': 'Apartment updated successfully', 'data': serializer.data},
+                status=status.HTTP_200_OK
+            )
+        except Apartment.DoesNotExist:
+            return Response(
+                {"success": False, "status": 404, "error": "Apartment not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except ValidationError as e:
+            general_logger.error("Validation error updating apartment (pk=%s): %s", pk, e)
+            return Response(
+                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as e:
+            general_logger.error("Exception error updating apartment (pk=%s): %s", pk, e)
+            return Response(
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @extend_schema()
+    def destroy(self, request, pk=None):
+        """
+        Delete an apartment endpoint.
+
+        Admins only.
+        """
+        try:
+            apartment = Apartment.objects.get(id=pk)
+            # Delete files from storage before deleting the record
+            if apartment.video:
+                apartment.video.delete(save=False)
+            if apartment.document_file:
+                apartment.document_file.delete(save=False)
+            for image in ApartmentImage.objects.filter(apartment=apartment):
+                if image.image:
+                    image.image.delete(save=False)
+            apartment.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Apartment.DoesNotExist:
+            return Response(
+                {"success": False, "status": 404, "error": "Apartment not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            general_logger.error("Exception error deleting apartment (pk=%s): %s", pk, e)
+            return Response(
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
