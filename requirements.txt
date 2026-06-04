@@ -8,11 +8,11 @@ django-rest-passwordreset==1.4.1
 django-redis==5.0.0
 drf-spectacular==0.28.0
 celery==5.6.0
-psycopg2-binary==2.9.5
+psycopg2-binary==2.9.12
 # mysqlclient==2.1.1
-# Pillow==9.4.0
-# cloudinary==1.32.0
-# django-cloudinary-storage==0.3.0
+Pillow==12.2.0
+cloudinary==1.32.0
+django-cloudinary-storage[video]==0.3.0
 flake8==6.0.0
 black==23.3.0
 whitenoise==6.6.0

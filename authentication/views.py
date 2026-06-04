@@ -47,12 +47,12 @@ class AuthViewSet(viewsets.ViewSet):
         serializer = SignupSerializer(data=request.data)
         try:
             serializer.is_valid(raise_exception=True)
-            verification = verify_bvn(serializer.validated_data)
-            if not verification.get("success"):
-                return Response(
-                    {"success": False, "status": 400, "error": "BVN verification failed"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            # verification = verify_bvn(serializer.validated_data)
+            # if not verification.get("success"):
+            #     return Response(
+            #         {"success": False, "status": 400, "error": "BVN verification failed"},
+            #         status=status.HTTP_400_BAD_REQUEST
+            #     )
             serializer.save()
             AuthViewSet.resend_activation(self, request, reg_email=serializer.validated_data['email'])  # Send activation email
             return Response(

@@ -13,9 +13,8 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
-import logging.config
+import os, logging.config, certifi
 
-import django
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -34,7 +33,7 @@ if len(SECRET_KEY.encode()) < 32:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', cast=bool, default=True)
 
-ALLOWED_HOSTS = ['127.0.0.1', 'dwellingbloomapi.onrender.com']
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=lambda v: [host.strip() for host in v.split(',')])
 
 # CORS_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173", "https://dwellingbloom.netlify.app"]
 
@@ -58,10 +57,12 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'drf_spectacular',
     'corsheaders',
+    'cloudinary',
+    'cloudinary_storage',
 
     # Local apps
     'authentication',
-    # 'properties',
+    'properties',
 ]
 
 MIDDLEWARE = [
@@ -99,27 +100,35 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
-
-DATABASES = {
-    'default': {
-        # # Test with SQLite for simplicity, switch to MySQL for production
-        # 'ENGINE': 'django.db.backends.sqlite3',
-        # 'NAME': BASE_DIR / 'db.sqlite3',
-
-        # PostgreSQL configuration for production
-        'ENGINE': 'django.db.backends.postgresql',
-        'HOST': config('DB_HOST'),
-        'PORT': config('DB_PORT'),
-        'NAME': config('DB_NAME'),
-        'USER': config('DB_USER'),
-        'PASSWORD': config('DB_PASS'),
-
-        # # Add to above for MySQL configuration
-        # 'OPTIONS': {
-        #     'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-        # },
+if DEBUG:
+    # Test with SQLite for simplicity, switch to MySQL for production
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            # # Test with SQLite for simplicity, switch to MySQL for production
+            # 'ENGINE': 'django.db.backends.sqlite3',
+            # 'NAME': BASE_DIR / 'db.sqlite3',
+
+            # PostgreSQL configuration for production
+            'ENGINE': 'django.db.backends.postgresql',
+            'HOST': config('DB_HOST'),
+            'PORT': config('DB_PORT'),
+            'NAME': config('DB_NAME'),
+            'USER': config('DB_USER'),
+            'PASSWORD': config('DB_PASS'),
+
+            # # Add to above for MySQL configuration
+            # 'OPTIONS': {
+            #     'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            # },
+        }
+    }
 
 
 # Password validation
@@ -182,6 +191,21 @@ SITE_ID = 1
 STATIC_ROOT = BASE_DIR/'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
+MEDIA_URL = '/dwellingbloom/'
+# MEDIA_ROOT = BASE_DIR/'media'
+
+
+# Cloudinary configuration
+CLOUDINARY_STORAGE = {
+    "CLOUD_NAME": config("CLOUD_NAME"),
+    "API_KEY": config("API_KEY"),
+    "API_SECRET": config("API_SECRET"),
+    "SECURE": False,
+    "INVALID_VIDEO_ERROR_MESSAGE": "Please upload a valid video file.",
+}
+# Default file storage configuration
+DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
+
 
 # DRF-Spectacular config
 SPECTACULAR_SETTINGS = {
@@ -200,11 +224,13 @@ SPECTACULAR_SETTINGS = {
             }
         }
     },
+    'COMPONENT_SPLIT_REQUEST': True,
     'SECURITY': [{'Bearer': []}],
     'TAGS': [
         {'name': 'Auth',  'description': 'Authentication endpoints'},
         {'name': 'Users', 'description': 'User profile endpoints'},
         {'name': 'Admin', 'description': 'Admin management endpoints'},
+        {'name': 'Apartment', 'description': 'Endpoints for managing apartment listings'},
     ],
 }
 
@@ -279,7 +305,7 @@ SESSION_CACHE_ALIAS = "default"
 
 
 # Celery Config
-CELERY_TIMEZONE = "Nigeria/Lagos"
+CELERY_TIMEZONE = "Africa/Lagos"
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
 CELERY_BROKER_URL = config("REDIS_URL")
@@ -304,6 +330,33 @@ EMAIL_TIMEOUT = 30  # 30 sec
 
 
 # Logging config
+IS_VERCEL = os.environ.get("VERCEL") is not None
+
+if IS_VERCEL:
+    general_handler = {
+        "level": "INFO",
+        "class": "logging.StreamHandler",
+        "formatter": "verbose",
+    }
+    email_handler = {
+        "level": "ERROR",
+        "class": "logging.StreamHandler",
+        "formatter": "verbose",
+    }
+else:
+    general_handler = {
+        "level": "INFO",
+        "class": "logging.FileHandler",
+        "filename": "general.log",
+        "formatter": "verbose",
+    }
+    email_handler = {
+        "level": "ERROR",
+        "class": "logging.FileHandler",
+        "filename": "email_errors.log",
+        "formatter": "verbose",
+    }
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -318,18 +371,8 @@ LOGGING = {
         },
     },
     'handlers': {
-        'file_general': {
-            'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': 'general.log',
-            'formatter': 'verbose',
-        },
-        'file_email': {
-            'level': 'ERROR',
-            'class': 'logging.FileHandler',
-            'filename': 'email_errors.log',
-            'formatter': 'verbose',
-        },
+        'file_general': general_handler,
+        'file_email': email_handler,
     },
     'loggers': {
         'django': {
