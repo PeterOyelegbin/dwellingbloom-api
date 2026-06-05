@@ -35,3 +35,22 @@ run-app:
 create-superuser:
 	# Create a superuser for admin access
 	python manage.py createsuperuser
+
+run-prod-checks:
+	# Run production checks
+	python manage.py check --deploy
+	python manage.py check --deploy --fail-level E
+	python manage.py check --deploy --fail-level W
+
+run-all:
+	# Run all commands
+	make install-deps
+	make lint
+	make format-check
+	make format
+	make tests
+	make run-migration
+	make start-celery
+	make run-app
+	make create-superuser
+	make run-prod-checks

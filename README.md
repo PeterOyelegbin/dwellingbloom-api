@@ -73,6 +73,11 @@ Dwelling Bloom is a significant step towards modernizing the real estate market 
 
 ---
 
+## TODO
+- [ ] **Error Tracking:** Integrate Sentry to track exceptions and 500 errors proactively in production.
+
+---
+
 ## License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 

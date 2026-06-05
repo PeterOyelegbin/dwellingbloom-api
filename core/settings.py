@@ -31,15 +31,20 @@ if len(SECRET_KEY.encode()) < 32:
     raise ValueError("SECRET_KEY must be at least 32 bytes long")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', cast=bool, default=True)
+DEBUG = config('DEBUG', cast=bool, default=False)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=lambda v: [host.strip() for host in v.split(',')])
 
-# CORS_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173", "https://dwellingbloom.netlify.app"]
+CORS_ALLOWED_ORIGINS = ["https://dwellingbloom.com.ng", "https://www.dwellingbloom.com.ng"]
+if DEBUG:
+    CORS_ALLOWED_ORIGINS += ["http://localhost:3000", "http://127.0.0.1:3000"]
 
-CSRF_TRUSTED_ORIGINS = ['http://*', 'https://*', 'https://dwellingbloom.netlify.app']
+CSRF_TRUSTED_ORIGINS = ["https://dwellingbloom.com.ng", "https://www.dwellingbloom.com.ng"]
 
-CORS_ALLOW_ALL_ORIGINS = True
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 
 # Application definition
@@ -111,10 +116,6 @@ if DEBUG:
 else:
     DATABASES = {
         'default': {
-            # # Test with SQLite for simplicity, switch to MySQL for production
-            # 'ENGINE': 'django.db.backends.sqlite3',
-            # 'NAME': BASE_DIR / 'db.sqlite3',
-
             # PostgreSQL configuration for production
             'ENGINE': 'django.db.backends.postgresql',
             'HOST': config('DB_HOST'),
@@ -284,11 +285,6 @@ SIMPLE_JWT = {
 
 # Cache config
 CACHES = {
-    # 'default': {
-    #     'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-    #     'LOCATION': 'unique-snowflake',
-    # }
-
     # Add Redis configuration for production
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
@@ -314,7 +310,7 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 
 
-FRONTEND_URL = "http://127.0.0.1:8000/api/v1/auth"
+FRONTEND_URL = config("FRONTEND_URL", default="https://dwellingbloom.com.ng")
 
 
 # Email config

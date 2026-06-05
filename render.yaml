@@ -1,0 +1,23 @@
+services:
+  # Celery Worker Service
+  - type: worker
+    name: dwellingbloom-celery-worker
+    env: python
+    region: frankfurt # update as needed
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A core worker -l info
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: dwellingbloom-redis
+      # Add other necessary env vars below (DB_HOST, SECRET_KEY, etc.)
+      - key: DEBUG
+        value: "False"
+
+  # Optional Redis Service for Celery
+  - type: redis
+    name: dwellingbloom-redis
+    region: frankfurt # update as needed
+    ipAllowList: [] # internal access only
+    plan: free
