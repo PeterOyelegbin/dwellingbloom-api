@@ -25,7 +25,7 @@ class UserModel(AbstractUser):
     last_name = models.CharField(max_length=255)
     email = models.EmailField(max_length=255, unique=True, db_index=True)
     phone_number = models.CharField(max_length=15, help_text='+23480XXXXXXXX', blank=True, null=True)
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='TENANT')
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='TENANT', db_index=True)
     # nin = models.CharField(max_length=25, blank=True, null=True)
     bvn = models.CharField(max_length=25, blank=True, null=True)
     account_number = models.CharField(max_length=10, blank=True, null=True)
@@ -69,5 +69,5 @@ class PasswordResetToken(models.Model):
         """
         Check if the OTP has expired.
         """
-        expiration_time = timedelta(minutes=config('PASSWORD_RESET_TOKEN_EXPIRE_MINUTES'))
+        expiration_time = timedelta(minutes=config('PASSWORD_RESET_TOKEN_EXPIRE_MINUTES', default=5, cast=int))
         return now() > self.created_at + expiration_time

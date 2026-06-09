@@ -75,6 +75,7 @@ Dwelling Bloom is a significant step towards modernizing the real estate market 
 
 ## TODO
 - [ ] **Error Tracking:** Integrate Sentry to track exceptions and 500 errors proactively in production.
+- [ ] **Async File Deletion:** Offload the deletion of files (images, video, documents) from Cloudinary to a background Celery task to improve API response times during apartment deletion.
 
 ---
 

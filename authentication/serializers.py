@@ -135,7 +135,32 @@ class ProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'first_name', 'last_name', 'email', 'role', 'bvn']
 
 
+class OwnerSummarySerializer(serializers.ModelSerializer):
+    """
+    Minimal read-only serializer for embedding owner info in apartment responses.
+    Exposes only non-sensitive identity fields.
+    """
+    class Meta:
+        model = UserModel
+        fields = ('id', 'first_name', 'last_name', 'email')
+
+
 class AdminUserSerializer(serializers.ModelSerializer):
+    """
+    Admin-facing user serializer. Sensitive fields (BVN, account number)
+    are masked to comply with NDPR data minimisation requirements.
+    """
+    bvn = serializers.SerializerMethodField()
+    account_number = serializers.SerializerMethodField()
+
     class Meta:
         model = UserModel
         fields = ['id', 'first_name', 'last_name', 'email', 'phone_number', 'role', 'bvn', 'account_number', 'account_name', 'bank_name', 'is_verified', 'is_active']
+
+    def get_bvn(self, obj):
+        """Mask BVN — show only last 4 digits."""
+        return f'***{obj.bvn[-4:]}' if obj.bvn else None
+
+    def get_account_number(self, obj):
+        """Mask account number — show only last 4 digits."""
+        return f'***{obj.account_number[-4:]}' if obj.account_number else None

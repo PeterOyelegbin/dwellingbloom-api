@@ -13,7 +13,7 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
-import os, logging.config, certifi
+import os, logging.config
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -35,12 +35,11 @@ DEBUG = config('DEBUG', cast=bool, default=False)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=lambda v: [host.strip() for host in v.split(',')])
 
-CORS_ALLOWED_ORIGINS = ["https://dwellingbloom.com.ng", "https://www.dwellingbloom.com.ng"]
-if DEBUG:
-    CORS_ALLOWED_ORIGINS += ["http://localhost:3000", "http://127.0.0.1:3000"]
+CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', cast=lambda v: [origin.strip() for origin in v.split(',')])
 
-CSRF_TRUSTED_ORIGINS = ["https://dwellingbloom.com.ng", "https://www.dwellingbloom.com.ng"]
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
+# Security settings for production
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
@@ -72,14 +71,14 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
 ROOT_URLCONF = 'core.urls'
@@ -106,7 +105,7 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
 if DEBUG:
-    # Test with SQLite for simplicity, switch to MySQL for production
+    # Test with SQLite for simplicity, switch to PostgreSQL/MySQL for production
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -123,6 +122,10 @@ else:
             'NAME': config('DB_NAME'),
             'USER': config('DB_USER'),
             'PASSWORD': config('DB_PASS'),
+            # Reuse DB connections for 60s to avoid per-request reconnect overhead
+            'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=60, cast=int),
+            # Verify connection is alive before reusing (prevents stale connection errors)
+            'CONN_HEALTH_CHECKS': True,
 
             # # Add to above for MySQL configuration
             # 'OPTIONS': {
@@ -192,6 +195,8 @@ SITE_ID = 1
 STATIC_ROOT = BASE_DIR/'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
+
+# media files config
 MEDIA_URL = '/dwellingbloom/'
 # MEDIA_ROOT = BASE_DIR/'media'
 
@@ -201,7 +206,7 @@ CLOUDINARY_STORAGE = {
     "CLOUD_NAME": config("CLOUD_NAME"),
     "API_KEY": config("API_KEY"),
     "API_SECRET": config("API_SECRET"),
-    "SECURE": False,
+    "SECURE": True,  # Serve all media over HTTPS
     "INVALID_VIDEO_ERROR_MESSAGE": "Please upload a valid video file.",
 }
 # Default file storage configuration
@@ -216,6 +221,17 @@ SPECTACULAR_SETTINGS = {
     'CONTACT': {'name': 'Peter Oyelegbin', 'url': 'https://peteroyelegbin.com.ng', 'email': 'peteroyelegbin@gmail.com'},
     'LICENSE': {'name': 'MIT License', 'url': 'https://opensource.org/licenses/MIT'},
     'SERVE_INCLUDE_SCHEMA': False,
+    'SERVERS': [
+        {'url': 'http://127.0.0.1:8000', 'description': 'Development server'},
+        {'url': 'https://dwellingbloom-api.vercel.app', 'description': 'Staging server'},
+        {'url': 'https://api.dwellingbloom.com.ng', 'description': 'Production server'},
+    ],
+    'SWAGGER_UI_SETTINGS': {
+        'docExpansion': 'none',         # collapses all tags by default
+        'filter': True,                 # adds a search bar to filter endpoints by tag or path
+        'persistAuthorization': True,   # keeps the Bearer token after page refresh
+        'displayRequestDuration': True, # shows how long each request took
+    },
     'COMPONENTS': {
         'securitySchemes': {
             'Bearer': {
@@ -259,13 +275,13 @@ SIMPLE_JWT = {
 
     'REFRESH_TOKEN_LIFETIME': timedelta(days=int(config('REFRESH_TOKEN_EXPIRE_DAYS'))),
     'ROTATE_REFRESH_TOKENS': False,
-    'BLACKLIST_AFTER_ROTATION': True,                # Prevent token reuse
+    'BLACKLIST_AFTER_ROTATION': True,       # Prevent token reuse
     'UPDATE_LAST_LOGIN': True,
 
     # Algorithm for signing tokens
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': config('SECRET_KEY'),
-    'VERIFYING_KEY': None,                           # Explicitly set
+    'VERIFYING_KEY': None,                  # Explicitly set
 
     # Token type header & User ID claim
     'AUTH_HEADER_TYPES': ('Bearer',),
@@ -273,7 +289,7 @@ SIMPLE_JWT = {
     'USER_ID_CLAIM': 'user_id',
 
     # Token identification
-    'JTI_CLAIM': 'jti',                              # This is crucial for blacklisting
+    'JTI_CLAIM': 'jti',                     # This is crucial for blacklisting
 
     # Token class
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
@@ -284,6 +300,8 @@ SIMPLE_JWT = {
 
 
 # Cache config
+CACHE_TTL_MINUTES = config('CACHE_TTL_MINUTES', default=10, cast=int)
+
 CACHES = {
     # Add Redis configuration for production
     'default': {
@@ -304,13 +322,13 @@ SESSION_CACHE_ALIAS = "default"
 CELERY_TIMEZONE = "Africa/Lagos"
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
-CELERY_BROKER_URL = config("REDIS_URL")
-CELERY_RESULT_BACKEND = config("REDIS_URL")
+CELERY_BROKER_URL = config("CELERY_BROKER_URL")
+CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND")
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 
 
-FRONTEND_URL = config("FRONTEND_URL", default="https://dwellingbloom.com.ng")
+FRONTEND_URL = config("FRONTEND_URL")
 
 
 # Email config

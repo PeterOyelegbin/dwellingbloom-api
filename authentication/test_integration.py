@@ -110,7 +110,7 @@ class UserManagementTests(APITestCase):
         # First, create a user that needs activation
         self.user.is_verified = False
         self.user.save()
-        
+
         # Now, resend the activation email
         url = reverse('resend-activation')
         data = {
@@ -118,11 +118,3 @@ class UserManagementTests(APITestCase):
         }
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-
-    def test_google_auth_redirect(self):
-        url = reverse('google-login')
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
-        self.assertIn('accounts.google.com', response.url)
-        

@@ -103,7 +103,7 @@ class AuthViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            general_logger.error("Exception error: %s", e)
+            general_logger.error("Exception error in resend_activation: %s", e, exc_info=True)
             return Response(
                 {"success": False, "status": 500, "error": "An error occurred: Contact support"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -302,7 +302,7 @@ class AuthViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            general_logger.error("Exception error: %s", e)
+            general_logger.error("Exception error in reset_password: %s", e, exc_info=True)
             return Response(
                 {"success": False, "status": 500, "error": "An error occured: Contact support"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

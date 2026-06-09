@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from authentication.serializers import SignupSerializer
+from authentication.serializers import OwnerSummarySerializer
 from .models import Apartment, ApartmentImage
 
 
@@ -10,7 +10,7 @@ class ApartmentImageSerializer(serializers.ModelSerializer):
 
 
 class ApartmentSerializer(serializers.ModelSerializer):
-    owner = SignupSerializer(read_only=True)
+    owner = OwnerSummarySerializer(read_only=True)
     images = ApartmentImageSerializer(many=True, read_only=True)
     uploaded_images = serializers.ListField(child=serializers.ImageField(), write_only=True, required=False)
     

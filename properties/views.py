@@ -3,11 +3,14 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from django.db.models import Q
+from django.core.cache import cache
+from django.conf import settings
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from utils.logger_config import general_logger
 from utils.page_config import ListPagination
 from .models import Apartment
 from .serializers import *
+import hashlib
 
 # Create your views here.
 @extend_schema(tags=['Apartment'])
@@ -23,7 +26,7 @@ class ApartmentViewSet(viewsets.ViewSet):
     def get_permissions(self):
         if self.action in ['list']:
             return [permissions.AllowAny()]
-        elif self.action in ['destroy']:
+        elif self.action in ['verify_apartment', 'destroy']:
             return [permissions.IsAdminUser()]
         else:
             return [permissions.IsAuthenticated()]
@@ -44,6 +47,7 @@ class ApartmentViewSet(viewsets.ViewSet):
         try:
             serializer.is_valid(raise_exception=True)
             serializer.save(owner=request.user)
+            cache.delete_pattern("public_apartments_*")
             return Response(
                 {'success': True, 'status': 201, 'message': 'Apartment created successfully', 'data': serializer.data},
                 status=status.HTTP_201_CREATED
@@ -79,8 +83,19 @@ class ApartmentViewSet(viewsets.ViewSet):
         Supports pagination via ?page= and ?page_size=
         """
         try:
-            search_query = request.query_params.get('search', '').strip()
-            apartments = Apartment.objects.all().order_by('id')
+            # Sanitise inputs before building the cache key to prevent key flooding
+            search_query = request.query_params.get('search', '').strip()[:100]  # max 100 chars
+            page_num = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 10))
+            is_public_request = not (request.user.is_authenticated and (request.user.is_staff or request.user.role == 'OWNER'))
+            # Hash the search term so the Redis key length is always fixed
+            search_hash = hashlib.md5(search_query.encode()).hexdigest()
+            cache_key = f'public_apartments_{search_hash}_p{page_num}_s{page_size}'
+            if is_public_request:
+                cached_data = cache.get(cache_key)
+                if cached_data:
+                    return Response(cached_data, status=status.HTTP_200_OK)
+            apartments = Apartment.objects.select_related('owner').prefetch_related('images').all().order_by('id')
             if request.user.is_authenticated and request.user.is_staff:
                 pass
             elif request.user.is_authenticated and request.user.role == 'OWNER':
@@ -92,22 +107,22 @@ class ApartmentViewSet(viewsets.ViewSet):
             paginator = ListPagination()
             paginated_apartments = paginator.paginate_queryset(apartments, request)
             serializer = ApartmentSummarySerializer(paginated_apartments, many=True)
-            return Response(
-                {
-                    "success": True,
-                    "status": 200,
-                    "message": "Apartments listed successfully",
-                    "pagination": {
-                        "total":    paginator.page.paginator.count,
-                        "page":     paginator.page.number,
-                        "pages":    paginator.page.paginator.num_pages,
-                        "has_next": paginator.page.has_next(),
-                        "has_prev": paginator.page.has_previous(),
-                    },
-                    "data": serializer.data,
+            response_data = {
+                "success": True,
+                "status": 200,
+                "message": "Apartments listed successfully",
+                "pagination": {
+                    "total":    paginator.page.paginator.count,
+                    "page":     paginator.page.number,
+                    "pages":    paginator.page.paginator.num_pages,
+                    "has_next": paginator.page.has_next(),
+                    "has_prev": paginator.page.has_previous(),
                 },
-                status=status.HTTP_200_OK,
-            )
+                "data": serializer.data,
+            }
+            if is_public_request:
+                cache.set(cache_key, response_data, timeout=settings.CACHE_TTL_MINUTES * 60)
+            return Response(response_data, status=status.HTTP_200_OK)
         except Exception as e:
             general_logger.error("Exception error listing apartments: %s", e)
             return Response(
@@ -129,7 +144,7 @@ class ApartmentViewSet(viewsets.ViewSet):
             # Owners are restricted to their own apartments
             if request.user.is_authenticated and request.user.role == 'OWNER':
                 filters['owner'] = request.user.id
-            apartment = Apartment.objects.get(**filters)
+            apartment = Apartment.objects.select_related('owner').prefetch_related('images').get(**filters)
             serializer = self.serializer_class(apartment)
             return Response(
                 { 'success': True, 'status': 200, 'message': 'Appartment retrieved successfully', 'data': serializer.data},
@@ -157,10 +172,10 @@ class ApartmentViewSet(viewsets.ViewSet):
             Admins can update any field of any apartment.
             """
             if request.user.is_staff:
-                apartment = Apartment.objects.get(id=pk)
+                apartment = Apartment.objects.select_related('owner').prefetch_related('images').get(id=pk)
                 serializer = AdminApartmentUpdateSerializer(apartment, data=request.data, partial=True)
             elif request.user.role == 'OWNER':
-                apartment = Apartment.objects.get(id=pk, owner=request.user.id)
+                apartment = Apartment.objects.select_related('owner').prefetch_related('images').get(id=pk, owner=request.user.id)
                 serializer = OwnerApartmentUpdateSerializer(apartment, data=request.data, partial=True)
             else:
                 return Response(
@@ -169,6 +184,7 @@ class ApartmentViewSet(viewsets.ViewSet):
                 )
             serializer.is_valid(raise_exception=True)
             serializer.save()
+            cache.delete_pattern("public_apartments_*")
             general_logger.info("This (data=%s) for apartment (pk=%s) was updated successfully by user (%s)", serializer.data, pk, request.user)
             return Response(
                 {'success': True, 'status': 200, 'message': 'Apartment updated successfully', 'data': serializer.data},
@@ -192,6 +208,35 @@ class ApartmentViewSet(viewsets.ViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+    @extend_schema(request=None)
+    def verify_apartment(self, request, pk=None):
+        """
+        Verify an apartment endpoint.
+
+        Admins can only verify a specific apartment.
+        """
+        try:
+            apartment = Apartment.objects.get(id=pk)
+            apartment.is_verified = True
+            apartment.save()
+            cache.delete_pattern("public_apartments_*")
+            general_logger.info("Apartment (id=%s) was verified successfully by %s", pk, request.user)
+            return Response(
+                {'success': True, 'status': 200, 'message': 'Apartment verified successfully'},
+                status=status.HTTP_200_OK
+            )
+        except Apartment.DoesNotExist:
+            return Response(
+                {"success": False, "status": 404, "error": "Apartment not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            general_logger.error("Exception error verifying apartment (id=%s): %s", pk, e)
+            return Response(
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
     @extend_schema()
     def destroy(self, request, pk=None):
         """
@@ -210,6 +255,7 @@ class ApartmentViewSet(viewsets.ViewSet):
                 if image.image:
                     image.image.delete(save=False)
             apartment.delete()
+            cache.delete_pattern("public_apartments_*")
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Apartment.DoesNotExist:
             return Response(
