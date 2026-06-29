@@ -321,11 +321,46 @@ SESSION_CACHE_ALIAS = "default"
 # Celery Config
 CELERY_TIMEZONE = "Africa/Lagos"
 CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
+
+# Broker (RabbitMQ)
 CELERY_BROKER_URL = config("CELERY_BROKER_URL")
-CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND")
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_BROKER_CONNECTION_RETRY = True
+CELERY_BROKER_CONNECTION_MAX_RETRIES = 10
+CELERY_BROKER_HEARTBEAT = 10          # seconds; detect dead connections faster
+CELERY_BROKER_POOL_LIMIT = 10         # connection pool size per worker
+
+# Result Backend
+CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND")  # requires django-celery-results
+CELERY_RESULT_EXTENDED = True         # store args, kwargs, worker name, etc.
+CELERY_RESULT_EXPIRES = 60 * 60 * 24  # 1 day
+
+# Serialization
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]      # reject pickle — security best practice
+
+# Task Behaviour
+CELERY_TASK_ACKS_LATE = True          # ack after task completes, not on receipt
+CELERY_TASK_REJECT_ON_WORKER_LOST = True  # requeue if worker dies mid-task
+CELERY_TASK_TIME_LIMIT = 300          # hard kill after 5 min
+CELERY_TASK_SOFT_TIME_LIMIT = 240     # raises SoftTimeLimitExceeded at 4 min
+CELERY_TASK_MAX_RETRIES = 3
+CELERY_TASK_DEFAULT_RETRY_DELAY = 60  # seconds between retries
+
+# Worker
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # fair dispatch; critical with acks_late
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 500  # recycle worker after N tasks (memory leak guard)
+CELERY_WORKER_MAX_MEMORY_PER_CHILD = 200_000  # KB; ~200 MB per child process
+
+# Queues & Routing
+CELERY_TASK_DEFAULT_QUEUE = "default"
+CELERY_TASK_ROUTES = {
+    "utils.mail_config.send_email_task": {"queue": "emails"},
+}
+
+# Beat Scheduler (periodic tasks)
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
 
 FRONTEND_URL = config("FRONTEND_URL")
