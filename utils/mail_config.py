@@ -103,7 +103,7 @@ def reset_password_email_template(user, token: str) -> str:
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60, autoretry_for=(Exception,), retry_backoff=True,
-    retry_backoff_max=600, retry_jitter=True, queue="default", time_limit=300, soft_time_limit=240)
+    retry_backoff_max=600, retry_jitter=True, time_limit=300, soft_time_limit=240)
 def send_email_task(self, email_subject, email_body, email_recipient, email_headers=None):
     """
     Sends an HTML email asynchronously via Celery.

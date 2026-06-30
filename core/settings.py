@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'cloudinary',
     'cloudinary_storage',
+    'django_celery_results',
 
     # Local apps
     'authentication',
