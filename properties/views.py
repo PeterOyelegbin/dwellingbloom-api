@@ -8,6 +8,7 @@ from django.conf import settings
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from utils.logger_config import general_logger
 from utils.page_config import ListPagination
+from utils.validation_helper import extract_validation_error_message
 from .models import Apartment
 from .serializers import *
 import hashlib
@@ -53,9 +54,10 @@ class ApartmentViewSet(viewsets.ViewSet):
                 status=status.HTTP_201_CREATED
             )
         except ValidationError as e:
+            error_message = extract_validation_error_message(e)
             general_logger.error("Validation error creating apartment: %s", e)
             return Response(
-                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                {"success": False, "status": 400, "error": error_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         except Exception as e:
@@ -196,9 +198,10 @@ class ApartmentViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
         except ValidationError as e:
+            error_message = extract_validation_error_message(e)
             general_logger.error("Validation error updating apartment (pk=%s): %s", pk, e)
             return Response(
-                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                {"success": False, "status": 400, "error": error_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         except Exception as e:

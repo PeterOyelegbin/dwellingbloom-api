@@ -16,6 +16,7 @@ from utils.jwt_config import CustomJWTAuthentication
 from utils.kyc_config import verify_bvn
 from utils.mail_config import *
 from utils.page_config import ListPagination
+from utils.validation_helper import extract_validation_error_message
 from .models import PasswordResetToken
 from .serializers import *
 
@@ -60,9 +61,10 @@ class AuthViewSet(viewsets.ViewSet):
                 status=status.HTTP_201_CREATED
             )
         except ValidationError as e:
+            error_message = extract_validation_error_message(e)
             general_logger.error("Validation error: %s", e)
             return Response(
-                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                {"success": False, "status": 400, "error": error_message},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
@@ -97,9 +99,10 @@ class AuthViewSet(viewsets.ViewSet):
                 status=status.HTTP_200_OK
             )
         except ValidationError as e:
+            error_message = extract_validation_error_message(e)
             general_logger.error("Validation error: %s", e)
             return Response(
-                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                {"success": False, "status": 400, "error": error_message},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
@@ -171,9 +174,10 @@ class AuthViewSet(viewsets.ViewSet):
                 status=status.HTTP_200_OK
             )
         except ValidationError as e:
+            error_message = extract_validation_error_message(e)
             general_logger.error("Validation error: %s", e)
             return Response(
-                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                {"success": False, "status": 400, "error": error_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         except Exception as e:
@@ -296,9 +300,10 @@ class AuthViewSet(viewsets.ViewSet):
                 status=status.HTTP_200_OK
             )
         except ValidationError as e:
+            error_message = extract_validation_error_message(e)
             general_logger.error("Validation error: %s", e)
             return Response(
-                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                {"success": False, "status": 400, "error": error_message},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
@@ -325,9 +330,10 @@ class AuthViewSet(viewsets.ViewSet):
                 status=status.HTTP_200_OK
             )
         except ValidationError as e:
+            error_message = extract_validation_error_message(e)
             general_logger.error("Validation error: %s", e)
             return Response(
-                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                {"success": False, "status": 400, "error": error_message},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
@@ -390,9 +396,10 @@ class UserViewSet(viewsets.ViewSet):
                 status=status.HTTP_200_OK
             )
         except ValidationError as e:
+            error_message = extract_validation_error_message(e)
             general_logger.error("Validation error: %s", e)
             return Response(
-                {"success": False, "status": 400, "error": f"Validation error: {e}"},
+                {"success": False, "status": 400, "error": error_message},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
