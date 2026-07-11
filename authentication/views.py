@@ -8,8 +8,6 @@ from rest_framework_simplejwt.exceptions import TokenError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
-from django.utils.encoding import force_str
-from django.utils.http import urlsafe_base64_decode
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from utils.logger_config import general_logger
 from utils.jwt_config import CustomJWTAuthentication
@@ -88,9 +86,9 @@ class AuthViewSet(viewsets.ViewSet):
         try:
             serializer.is_valid(raise_exception=True)
             user = serializer.validated_data['user']
-            verification_link = generate_email_activation_link(user)
+            verification_token = generate_email_activation_token(user)
             email_subject = 'DwellingBloom App Support: Verify Your Email'
-            email_body = verification_email_template(user, verification_link)
+            email_body = verification_email_template(user, verification_token)
             recipient = [user.email]
             # Asynchronously handle send mail
             send_email_task.delay(email_subject, email_body, recipient)
@@ -113,31 +111,30 @@ class AuthViewSet(viewsets.ViewSet):
             )
 
     # ---- Verify Email ---- #
-    @extend_schema()
-    def verify_email(self, request, uidb64=None, token=None):
+    @extend_schema(request=VerifyEmailSerializer)
+    @action(detail=False, methods=['post'], throttle_classes=[AnonRateThrottle])
+    def verify_email(self, request):
         """
         Email verification endpoint
 
-        Verifies the user's email using the token sent in the activation link.
+        Verifies the user's email using the token sent in the email.
         """
         try:
-            uid = force_str(urlsafe_base64_decode(uidb64))
-            user = User.objects.get(id=uid)
-            if verify_email_activation_link(user, token):
+            supplied_token = request.data.get('token')
+            if not supplied_token:
+                return Response(
+                    {"success": False, "status": 400, "error": "A verification token is required."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            user = verify_email_activation_token(supplied_token)
+            if user is not None:
                 return Response(
                     {"success": True, "status": 200, "message": "Email verified successfully."},
                     status=status.HTTP_200_OK
                 )
-            else:
-                return Response(
-                    {"success": False, "status": 400, "error": "Invalid verification link."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        except User.DoesNotExist:
-            general_logger.error("User not found: %s", uid)
             return Response(
-                {"success": False, "status": 404, "error": "User not found."},
-                status=status.HTTP_404_NOT_FOUND
+                {"success": False, "status": 400, "error": "Invalid verification token."},
+                status=status.HTTP_400_BAD_REQUEST
             )
         except (TypeError, ValueError, Exception) as e:
             general_logger.error("Exception error: %s", e)

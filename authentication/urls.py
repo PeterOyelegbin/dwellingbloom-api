@@ -5,7 +5,7 @@ urlpatterns = [
     # Auth Endpoints
     path('auth/signup', AuthViewSet.as_view({'post': 'signup'}), name='signup'),
     path('auth/resend-activation', AuthViewSet.as_view({'post': 'resend_activation'}), name='resend-activation'),
-    path('auth/verify-email/<str:uidb64>/<str:token>', AuthViewSet.as_view({'post': 'verify_email'}), name='verify-email'),
+    path('auth/verify-email', AuthViewSet.as_view({'post': 'verify_email'}), name='verify-email'),
     path('auth/login', AuthViewSet.as_view({'post': 'login'}), name='login'),
     path('auth/token/refresh', AuthViewSet.as_view({'post': 'refresh'}), name='token-refresh'),
     path('auth/logout', AuthViewSet.as_view({'post': 'logout'}), name='logout'),

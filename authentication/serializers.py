@@ -58,6 +58,10 @@ class ResendActivationEmailSerializer(serializers.Serializer):
         return attrs
 
 
+class VerifyEmailSerializer(serializers.Serializer):
+    token = serializers.CharField()
+
+
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)

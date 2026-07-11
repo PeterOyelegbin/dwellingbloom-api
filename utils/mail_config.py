@@ -1,20 +1,23 @@
-from django.contrib.auth.tokens import default_token_generator
-from django.utils.http import urlsafe_base64_encode
-from django.utils.encoding import force_bytes
 from django.utils import timezone
+from django.core.signing import Signer
 from django.core.mail import EmailMultiAlternatives
+from django.contrib.auth import get_user_model
 from django.conf import settings
 from celery import shared_task
+from time import time
 from .logger_config import email_logger, general_logger
 
-def generate_email_activation_link(user):
-    uid = urlsafe_base64_encode(force_bytes(user.id))
-    token = default_token_generator.make_token(user)
-    activation_link = f"{settings.FRONTEND_URL}/verify-email/{uid}/{token}"
-    return activation_link
+def generate_email_activation_token(user):
+    """
+    Generate a token with expiration embedded in it.
+    """
+    signer = Signer(salt='email-verification')
+    expiry_timestamp = int(time()) + (settings.EMAIL_VERIFICATION_EXPIRY_HOURS * 60 * 60)
+    data = f"{user.id}:{expiry_timestamp}"
+    return signer.sign(data)
 
 
-def verification_email_template(user, verification_link: str) -> str:
+def verification_email_template(user, verification_token: str) -> str:
     """
     Returns html body for the email verification email.
     """
@@ -29,21 +32,16 @@ def verification_email_template(user, verification_link: str) -> str:
                         <tr>
                             <td style="padding: 20px;">
                                 <p style="font-size: 16px; color: #333;">Hello {user},</p>
-                                <p style="font-size: 16px; color: #333;">Thank you for registering. Please verify your email by clicking the button below:</p>
-                                <table cellpadding="0" cellspacing="0" border="0" align="center">
+                                <p style="font-size: 16px; color: #333;">Thank you for registering. Use the verification token below to verify your email within the next 12 hours before it expires:</p>
+                                <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 20px 0;">
                                     <tr>
-                                        <td align="center">
-                                            <a href="{verification_link}"
-                                                style="background-color: #4CAF50; color: white; padding: 10px 30px;
-                                                       text-decoration: none; border-radius: 5px; font-size: 16px;">
-                                                Verify Email
-                                            </a>
+                                        <td align="center" style="background-color: #4CAF50; color: white; padding: 12px 24px; border-radius: 5px; font-size: 18px; font-weight: bold;">
+                                            {verification_token}
                                         </td>
                                     </tr>
                                 </table>
                                 <p style="font-size: 16px; color: #333; margin-top: 20px;">
-                                    If the button doesn't work, copy and paste this link:<br>
-                                    <a href="{verification_link}" style="color: #4CAF50;">{verification_link}</a>
+                                    Enter this token in the verification form to activate your account.
                                 </p>
                                 <p style="font-size: 16px; color: #333;">
                                     Regards,<br>
@@ -89,7 +87,7 @@ def reset_password_email_template(user, token: str) -> str:
                                 </table>
                                 <p style="font-size: 16px; color: #FF0000; margin: 20px 0 20px 0;">If you didn't request this, please ignore this email or contact support.</p>
 
-                                <p style="font-size: 16px; color: #333333; margin: 0;">Regards,<br><a href="https://dwellingbloom.com.ng" style="font-style: bold; text-decoration: none;">DwellingBloom</a></p>
+                                <p style="font-size: 16px; color: #333333; margin: 0;">Regards,<br><a href="https://dwellingbloom.com.ng" style="font-weight: bold; text-decoration: none;">DwellingBloom</a></p>
                             </td>
                         </tr>
                     </table>
@@ -119,16 +117,30 @@ def send_email_task(self, email_subject, email_body, email_recipient, email_head
         raise self.retry(exc=e)
 
 
-def verify_email_activation_link(user, token):
+def verify_email_activation_token(token):
+    """
+    Verify the token by checking embedded expiration only.
+    """
+    signer = Signer(salt='email-verification')
     try:
-        if default_token_generator.check_token(user, token):
-            user.is_verified = True
-            user.last_login = timezone.now()
-            user.save()
-            return True
-        else:
-            general_logger.error("Invalid or expired token: user=%s, token=%s", user, token)
-            return False
-    except (ValueError, TypeError) as e:
-        general_logger.error(f"Error verifying email activation link: {e}")
-        return False
+        User = get_user_model()
+        data = signer.unsign(token)
+        # Parse user_id and expiry
+        user_id, expiry_timestamp = data.split(':')
+        expiry_timestamp = int(expiry_timestamp)
+        # Check if token has expired
+        if time() > expiry_timestamp:
+            general_logger.error("Token has expired")
+            return None
+        # Get and verify user
+        user = User.objects.get(id=user_id)
+        user.is_verified = True
+        user.last_login = timezone.now()
+        user.save()
+        return user
+    except (ValueError, TypeError, User.DoesNotExist) as e:
+        general_logger.error("Invalid token: %s", e)
+        return None
+    except Exception as e:
+        general_logger.error("Invalid or expired token: %s", e)
+        return None
