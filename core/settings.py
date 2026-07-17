@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     # Local apps
     'authentication',
     'properties',
+    'chat',
 ]
 
 MIDDLEWARE = [
@@ -249,6 +250,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'Users', 'description': 'User profile endpoints'},
         {'name': 'Admin', 'description': 'Admin management endpoints'},
         {'name': 'Apartment', 'description': 'Endpoints for managing apartment listings'},
+        {'name': 'Conversations', 'description': 'Endpoints for managing chat functionality'},
     ],
 }
 
