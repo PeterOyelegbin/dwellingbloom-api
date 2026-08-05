@@ -27,7 +27,7 @@ run-migration:
 start-celery:
 	# Start Celery worker in the background
 	celery -A core worker -Q default,emails -l info --concurrency=2 --detach
-	celery -A core beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler --detach
+	# celery -A core beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler --detach
 
 stop-celery:
 	# Stop Celery worker

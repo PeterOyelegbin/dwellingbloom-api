@@ -119,6 +119,12 @@ class UpdatePasswordSerializer(serializers.Serializer):
             reset_token.delete()
             raise serializers.ValidationError("Token has expired.")
         if attrs['new_password'] != attrs['confirm_password']:
+            # Increment failed attempts for password mismatch too
+            reset_token.failed_attempts += 1
+            if reset_token.failed_attempts >= PasswordResetToken.MAX_ATTEMPTS:
+                reset_token.delete()
+                raise serializers.ValidationError("Too many failed attempts. Please request a new token.")
+            reset_token.save(update_fields=['failed_attempts'])
             raise serializers.ValidationError("Passwords do not match.")
         attrs['reset_token'] = reset_token  # Pass token to view if needed
         return attrs
@@ -133,10 +139,16 @@ class UpdatePasswordSerializer(serializers.Serializer):
 
 
 class ProfileSerializer(serializers.ModelSerializer):
+    bvn = serializers.SerializerMethodField()
+
     class Meta:
         model = UserModel
         fields = ('id', 'first_name', 'last_name', 'email', 'phone_number', 'role', 'bvn', 'account_number', 'account_name', 'bank_name')
         read_only_fields = ['id', 'first_name', 'last_name', 'email', 'role', 'bvn']
+
+    def get_bvn(self, obj):
+        """Mask BVN — show only last 4 digits."""
+        return f'***{obj.bvn[-4:]}' if obj.bvn else None
 
 
 class OwnerSummarySerializer(serializers.ModelSerializer):

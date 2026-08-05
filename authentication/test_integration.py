@@ -1,12 +1,19 @@
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from django.urls import reverse
-from django.utils.http import urlsafe_base64_encode
-from django.utils.encoding import force_bytes
-from django.contrib.auth.tokens import default_token_generator
+from django.test import override_settings
+from unittest.mock import patch
 from .models import UserModel, PasswordResetToken
+from utils.mail_config import generate_email_activation_token
 
 
+@override_settings(
+    CACHES={
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    },
+)
 class UserManagementTests(APITestCase):
     def setUp(self):
         self.client = APIClient()
@@ -22,7 +29,8 @@ class UserManagementTests(APITestCase):
         self.user.save()
 
 
-    def test_user_signup(self):
+    @patch('utils.mail_config.send_email_task.delay')
+    def test_user_signup(self, mock_send_email):
         url = reverse('signup')
         data = {
             'email': 'newuser@example.com',
@@ -38,13 +46,14 @@ class UserManagementTests(APITestCase):
 
 
     def test_verify_email(self):
-        # First generate a verification token
-        uid = urlsafe_base64_encode(force_bytes(self.user.pk))
-        token = default_token_generator.make_token(self.user)
+        # Generate a token using the app's actual token generator
+        self.user.is_verified = False
+        self.user.save()
+        token = generate_email_activation_token(self.user)
 
-        # Now verify the email
-        url = reverse('verify-email', kwargs={'uidb64': uid, 'token': token})
-        response = self.client.post(url)
+        # Now verify the email via POST with token in body
+        url = reverse('verify-email')
+        response = self.client.post(url, data={'token': token}, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.user.refresh_from_db()
         self.assertTrue(self.user.is_verified)
@@ -62,23 +71,25 @@ class UserManagementTests(APITestCase):
 
 
     def test_user_logout(self):
-        # First, login to get the token
+        # First, login to get the tokens
         login_url = reverse('login')
         login_data = {
             'email': 'test@example.com',
             'password': 'tEstp@ssword3'
         }
         login_response = self.client.post(login_url, login_data, format='json')
-        token = login_response.data['access_token']
+        access_token = login_response.data['access_token']
+        refresh_token = login_response.data['refresh_token']
 
-        # Now, logout
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        # Now, logout — must send refresh token in body
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
         logout_url = reverse('logout')
-        logout_response = self.client.post(logout_url)
-        self.assertEqual(logout_response.status_code, status.HTTP_205_RESET_CONTENT)
+        logout_response = self.client.post(logout_url, data={'refresh': refresh_token}, format='json')
+        self.assertEqual(logout_response.status_code, status.HTTP_200_OK)
 
 
-    def test_password_reset(self):
+    @patch('utils.mail_config.send_email_task.delay')
+    def test_password_reset(self, mock_send_email):
         url = reverse('reset-password')
         data = {
             'email': 'test@example.com'
@@ -106,7 +117,8 @@ class UserManagementTests(APITestCase):
         self.assertTrue(self.user.check_password('nEwp@ssword1'))
 
 
-    def test_resend_activation_email(self):
+    @patch('utils.mail_config.send_email_task.delay')
+    def test_resend_activation_email(self, mock_send_email):
         # First, create a user that needs activation
         self.user.is_verified = False
         self.user.save()

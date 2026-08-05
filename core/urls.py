@@ -14,12 +14,17 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 import authentication.urls, properties.urls, chat.urls
 
+def health_check(request):
+    return JsonResponse({"status": "healthy", "version": "1.0.0"})
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('health/', health_check, name='health'),
 
     # DRF Spectacular API schema and documentation URLs
     path('schema/', SpectacularAPIView.as_view(), name='schema'),

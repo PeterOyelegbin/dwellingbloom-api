@@ -6,17 +6,23 @@ from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from django.db.models import Q
-from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from utils.logger_config import general_logger
 from utils.jwt_config import CustomJWTAuthentication
 from utils.kyc_config import verify_bvn
-from utils.mail_config import *
+from utils.mail_config import (
+    generate_email_activation_token, verify_email_activation_token,
+    send_email_task, verification_email_template, reset_password_email_template,
+)
 from utils.page_config import ListPagination
 from utils.validation_helper import extract_validation_error_message
 from .models import PasswordResetToken
-from .serializers import *
+from .serializers import (
+    SignupSerializer, ResendActivationEmailSerializer, VerifyEmailSerializer,
+    LoginSerializer, RefreshTokenSerializer, ResetPasswordSerializer,
+    UpdatePasswordSerializer, ProfileSerializer, AdminUserSerializer,
+)
 
 
 # Create your views here.
@@ -68,7 +74,7 @@ class AuthViewSet(viewsets.ViewSet):
         except Exception as e:
             general_logger.error("Exception error: %s", e)
             return Response(
-                {"success": False, "status": 500, "error": "An error occured: Contact support"},
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -306,12 +312,13 @@ class AuthViewSet(viewsets.ViewSet):
         except Exception as e:
             general_logger.error("Exception error in reset_password: %s", e, exc_info=True)
             return Response(
-                {"success": False, "status": 500, "error": "An error occured: Contact support"},
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
     # ---- Update Password ---- #
     @extend_schema(request=UpdatePasswordSerializer)
+    @action(detail=False, methods=['post'], throttle_classes=[AnonRateThrottle])
     def confirm_reset_password(self, request):
         """
         User update password endpoint
@@ -336,7 +343,7 @@ class AuthViewSet(viewsets.ViewSet):
         except Exception as e:
             general_logger.error("Exception error: %s", e)
             return Response(
-                {"success": False, "status": 500, "error": "An error occured: Contact support"},
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -402,7 +409,7 @@ class UserViewSet(viewsets.ViewSet):
         except Exception as e:
             general_logger.error("Exception error: %s", e)
             return Response(
-                {"success": False, "status": 500, "error": "An error occured: Contact support"},
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -466,7 +473,7 @@ class UserViewSet(viewsets.ViewSet):
         Admin retrieves user data using user ID.
         """
         try:
-            user = get_object_or_404(User, id=pk)
+            user = User.objects.get(id=pk)
             serializer = AdminUserSerializer(user)
             return Response(
                 {"success": True, "status": 200, "message": "User retrieved successfully", "data": serializer.data},
@@ -481,7 +488,7 @@ class UserViewSet(viewsets.ViewSet):
         except Exception as e:
             general_logger.error("Exception error: %s", e)
             return Response(
-                {"success": False, "status": 500, "error": "An error occured: Contact support"},
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -493,7 +500,7 @@ class UserViewSet(viewsets.ViewSet):
         Admin delete a user account using user ID.
         """
         try:
-            user = get_object_or_404(User, id=pk)
+            user = User.objects.get(id=pk)
             user.delete()
             return Response(
                 {"success": True, "status": 200, "message": "User deleted successfully"},
@@ -508,6 +515,6 @@ class UserViewSet(viewsets.ViewSet):
         except Exception as e:
             general_logger.error("Exception error: %s", e)
             return Response(
-                {"success": False, "status": 500, "error": "An error occured: Contact support"},
+                {"success": False, "status": 500, "error": "An error occurred: Contact support"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

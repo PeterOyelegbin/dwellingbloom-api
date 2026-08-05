@@ -2,19 +2,24 @@ from django.urls import reverse
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework import status
-from django.utils.http import urlsafe_base64_encode
-from django.utils.encoding import force_bytes
-from django.contrib.auth.tokens import default_token_generator
+from unittest.mock import patch
 from .models import UserModel
+from utils.mail_config import generate_email_activation_token
 
-# Override settings to use a test database
+
+# Override settings to use a test database and in-memory cache
 @override_settings(
     DATABASES={
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': ':memory:',
         }
-    }
+    },
+    CACHES={
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    },
 )
 class UserViewsTestCase(TestCase):
     def setUp(self):
@@ -24,7 +29,7 @@ class UserViewsTestCase(TestCase):
         self.client = APIClient()
         self.signup_url = reverse('signup')
         self.login_url = reverse('login')
-        self.verify_email_url = reverse('verify-email', args=['uidb64', 'token'])
+        self.verify_email_url = reverse('verify-email')
         self.user_data = {
             'email': 'test@example.com',
             'password': 'tEstp@ssword1',
@@ -47,7 +52,8 @@ class UserViewsTestCase(TestCase):
         }
 
 
-    def test_signup_success(self):
+    @patch('utils.mail_config.send_email_task.delay')
+    def test_signup_success(self, mock_send_email):
         """
         Test successful user signup.
         """
@@ -73,7 +79,7 @@ class UserViewsTestCase(TestCase):
         response = self.client.post(self.signup_url, data=invalid_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data['success'], False)
-        
+    
 
     def test_verify_email_success(self):
         """
@@ -84,11 +90,10 @@ class UserViewsTestCase(TestCase):
         user.is_verified = False
         user.save()
 
-        # Generate a valid token (mocking the token generation logic)
-        uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
-        token = default_token_generator.make_token(user)
+        # Generate a valid token using the app's actual token generator
+        token = generate_email_activation_token(user)
 
-        response = self.client.post(self.verify_email_url.replace('uidb64', uidb64).replace('token', token))
+        response = self.client.post(self.verify_email_url, data={'token': token}, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['success'], True)
         self.assertEqual(response.data['message'], 'Email verified successfully.')
@@ -130,4 +135,4 @@ class UserViewsTestCase(TestCase):
         response = self.client.post(self.login_url, data=invalid_login_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data['success'], False)
-        self.assertEqual(response.data['error'], "Validation error: {'non_field_errors': [ErrorDetail(string='Invalid email or password.', code='invalid')]}")
+        self.assertEqual(response.data['error'], 'Invalid email or password.')

@@ -51,8 +51,10 @@ class PasswordResetToken(models.Model):
     This model is used to store the password reset token for a user.
     It contains the user, the token itself, and the creation time.
     """
+    MAX_ATTEMPTS = 5
     user = models.ForeignKey(UserModel, on_delete=models.CASCADE)
     token = models.CharField(max_length=6)
+    failed_attempts = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

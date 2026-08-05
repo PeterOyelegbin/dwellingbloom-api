@@ -41,9 +41,25 @@ CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
 # Security settings for production
 if not DEBUG:
+    # Redirect all HTTP traffic to HTTPS
     SECURE_SSL_REDIRECT = True
+
+    # # Required if HTTPS is terminated by Nginx, AWS ALB, Cloudflare, etc.
+    # SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+    # Secure cookies (only needed if using sessions/CSRF)
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+
+    # HSTS - Start with 1 day
+    SECURE_HSTS_SECONDS = 86400     # 1 day
+    # SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
+    # Additional security headers
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+    X_FRAME_OPTIONS = "DENY"
 
 
 # Application definition

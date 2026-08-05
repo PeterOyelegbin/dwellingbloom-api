@@ -1,4 +1,5 @@
 from django.utils import timezone
+from django.utils.html import escape
 from django.core.signing import Signer
 from django.core.mail import EmailMultiAlternatives
 from django.contrib.auth import get_user_model
@@ -21,6 +22,8 @@ def verification_email_template(user, verification_token: str) -> str:
     """
     Returns html body for the email verification email.
     """
+    safe_user = escape(str(user))
+    safe_token = escape(str(verification_token))
     body = f"""
     <html>
     <body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4;">
@@ -31,12 +34,12 @@ def verification_email_template(user, verification_token: str) -> str:
                         style="max-width: 600px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
                         <tr>
                             <td style="padding: 20px;">
-                                <p style="font-size: 16px; color: #333;">Hello {user},</p>
+                                <p style="font-size: 16px; color: #333;">Hello {safe_user},</p>
                                 <p style="font-size: 16px; color: #333;">Thank you for registering. Use the verification token below to verify your email within the next 12 hours before it expires:</p>
                                 <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 20px 0;">
                                     <tr>
                                         <td align="center" style="background-color: #4CAF50; color: white; padding: 12px 24px; border-radius: 5px; font-size: 18px; font-weight: bold;">
-                                            {verification_token}
+                                            {safe_token}
                                         </td>
                                     </tr>
                                 </table>
@@ -63,6 +66,8 @@ def reset_password_email_template(user, token: str) -> str:
     """
     Returns html body for the reset password email.
     """
+    safe_user = escape(str(user))
+    safe_token = escape(str(token))
     body = f"""
     <html>
     <body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4;">
@@ -74,13 +79,13 @@ def reset_password_email_template(user, token: str) -> str:
                         <tr>
                             <td style="padding: 20px;">
                                 <!-- Content -->
-                                <p style="font-size: 16px; color: #333333; margin: 0 0 20px 0;">Dear <strong>{user}</strong>,</p>
+                                <p style="font-size: 16px; color: #333333; margin: 0 0 20px 0;">Dear <strong>{safe_user}</strong>,</p>
                                 <p style="font-size: 16px; color: #333333; margin: 0 0 20px 0;">You have requested a password reset. Use the following token to reset your password within the next <strong>10 minutes</strong> before it expires:</p>
                                 <table cellpadding="0" cellspacing="0" border="0" align="center">
                                     <tr>
                                         <td align="center">
                                             <label style="background-color: #4CAF50; color: white; padding: 10px 30px; text-align: center; display: inline-block; font-size: 24px; font-style: bold;">
-                                                {token}
+                                                {safe_token}
                                             </label>
                                         </td>
                                     </tr>
