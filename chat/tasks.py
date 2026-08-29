@@ -1,5 +1,5 @@
 from celery import shared_task
-# from django.utils.html import escape
+from django.utils.html import escape
 from .models import Message
 from utils.mail_config import send_email_task
 
@@ -21,7 +21,10 @@ def notify_new_message(message_id):
     )
     if recipient is None or not recipient.email:
         return
-    sender_name = f"{message.sender.first_name} {message.sender.last_name}"
+    safe_sender_name = escape(f"{message.sender.first_name} {message.sender.last_name}")
+    safe_recipient_name = escape(recipient.first_name)
+    safe_apartment_name = escape(conversation.apartment.name)
+    safe_content = escape(message.content[:200])
     subject = f"New message about {conversation.apartment.name}"
     body = f"""
     <html>
@@ -32,14 +35,14 @@ def notify_new_message(message_id):
             <td style="padding: 24px;">
               <h2 style="margin: 0 0 16px; color: #1a1a1a;">New message on DwellingBloom</h2>
               <p style="margin: 0 0 12px; color: #333333;">
-                Hi {recipient.first_name},
+                Hi {safe_recipient_name},
               </p>
               <p style="margin: 0 0 12px; color: #333333;">
-                <strong>{sender_name}</strong> sent you a message about <strong>{conversation.apartment.name}</strong>:
+                <strong>{safe_sender_name}</strong> sent you a message about <strong>{safe_apartment_name}</strong>:
               </p>
               <blockquote style="margin: 0 0 20px; padding: 12px 16px; background: #f9f9f9;
                     border-left: 3px solid #cccccc; color: #555555; font-style: italic;">
-                {message.content[:200]}
+                {safe_content}
               </blockquote>
               <a href="https://dwellingbloom.com/conversations/{conversation.id}"
                  style="display: inline-block; padding: 10px 20px; background-color: #2b6cb0;

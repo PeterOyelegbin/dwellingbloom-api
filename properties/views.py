@@ -9,8 +9,12 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter
 from utils.logger_config import general_logger
 from utils.page_config import ListPagination
 from utils.validation_helper import extract_validation_error_message
-from .models import Apartment
-from .serializers import *
+from .models import Apartment, ApartmentImage
+from .permissions import IsOwnerRole
+from .serializers import (
+    ApartmentSerializer, ApartmentSummarySerializer,
+    OwnerApartmentUpdateSerializer, AdminApartmentUpdateSerializer,
+)
 import hashlib
 
 # Create your views here.
@@ -27,6 +31,8 @@ class ApartmentViewSet(viewsets.ViewSet):
     def get_permissions(self):
         if self.action in ['list']:
             return [permissions.AllowAny()]
+        elif self.action in ['create']:
+            return [IsOwnerRole()]
         elif self.action in ['verify_apartment', 'destroy']:
             return [permissions.IsAdminUser()]
         else:
@@ -39,11 +45,6 @@ class ApartmentViewSet(viewsets.ViewSet):
 
         Owners only. Accepts multipart/form-data to support image uploads.
         """
-        if request.user.role != 'OWNER':
-            return Response(
-                {'success': False, 'status': 403, 'message': 'Permission denied!'}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
         serializer = self.serializer_class(data=request.data, context={'request': request})
         try:
             serializer.is_valid(raise_exception=True)
@@ -149,7 +150,7 @@ class ApartmentViewSet(viewsets.ViewSet):
             apartment = Apartment.objects.select_related('owner').prefetch_related('images').get(**filters)
             serializer = self.serializer_class(apartment)
             return Response(
-                { 'success': True, 'status': 200, 'message': 'Appartment retrieved successfully', 'data': serializer.data},
+                { 'success': True, 'status': 200, 'message': 'Apartment retrieved successfully', 'data': serializer.data},
                 status=status.HTTP_200_OK
             )
         except Apartment.DoesNotExist:
@@ -166,13 +167,13 @@ class ApartmentViewSet(viewsets.ViewSet):
 
     @extend_schema(request=OwnerApartmentUpdateSerializer)
     def partial_update(self, request, pk=None):
-        try:
-            """
-            Update an apartment endpoint.
+        """
+        Update an apartment endpoint.
 
-            Owners can only update limited fields of their own apartments.
-            Admins can update any field of any apartment.
-            """
+        Owners can only update limited fields of their own apartments.
+        Admins can update any field of any apartment.
+        """
+        try:
             if request.user.is_staff:
                 apartment = Apartment.objects.select_related('owner').prefetch_related('images').get(id=pk)
                 serializer = AdminApartmentUpdateSerializer(apartment, data=request.data, partial=True)

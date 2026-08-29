@@ -45,15 +45,21 @@ class ConversationListSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.DictField(allow_null=True))
     def get_last_message(self, obj):
-        last = obj.messages.order_by("-created_at").first()
-        if not last:
+        # Uses prefetch cache — no extra query
+        messages = obj.messages.all()
+        if not messages:
             return None
+        last = max(messages, key=lambda m: m.created_at)
         return {"content": last.content, "sender": last.sender_id, "created_at": last.created_at}
 
     @extend_schema_field(serializers.IntegerField())
     def get_unread_count(self, obj):
         request_user = self.context["request"].user
-        return obj.messages.filter(is_read=False).exclude(sender=request_user).count()
+        # Uses prefetch cache — no extra query
+        return sum(
+            1 for m in obj.messages.all()
+            if not m.is_read and m.sender_id != request_user.id
+        )
 
 
 class ConversationCreateSerializer(serializers.ModelSerializer):
