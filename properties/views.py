@@ -10,10 +10,10 @@ from utils.logger_config import general_logger
 from utils.page_config import ListPagination
 from utils.validation_helper import extract_validation_error_message
 from .models import Apartment, ApartmentImage
-from .permissions import IsOwnerRole
+from .permissions import IsLandlordRole
 from .serializers import (
     ApartmentSerializer, ApartmentSummarySerializer,
-    OwnerApartmentUpdateSerializer, AdminApartmentUpdateSerializer,
+    LandlordApartmentUpdateSerializer, AdminApartmentUpdateSerializer,
 )
 import hashlib
 
@@ -32,7 +32,7 @@ class ApartmentViewSet(viewsets.ViewSet):
         if self.action in ['list']:
             return [permissions.AllowAny()]
         elif self.action in ['create']:
-            return [IsOwnerRole()]
+            return [IsLandlordRole()]
         elif self.action in ['verify_apartment', 'destroy']:
             return [permissions.IsAdminUser()]
         else:
@@ -43,12 +43,12 @@ class ApartmentViewSet(viewsets.ViewSet):
         """
         Create an apartment endpoint.
 
-        Owners only. Accepts multipart/form-data to support image uploads.
+        Landlord only. Accepts multipart/form-data to support image uploads.
         """
         serializer = self.serializer_class(data=request.data, context={'request': request})
         try:
             serializer.is_valid(raise_exception=True)
-            serializer.save(owner=request.user)
+            serializer.save(landlord=request.user)
             cache.delete_pattern("public_apartments_*")
             return Response(
                 {'success': True, 'status': 201, 'message': 'Apartment created successfully', 'data': serializer.data},
@@ -80,7 +80,7 @@ class ApartmentViewSet(viewsets.ViewSet):
         List apartments endpoint.
 
         - Admins see all apartments.
-        - Owners see only their own apartments.
+        - Landlord see only their own apartments.
         - Public users see only verified and available apartments.
         Supports search by city via ?search=
         Supports pagination via ?page= and ?page_size=
@@ -90,7 +90,7 @@ class ApartmentViewSet(viewsets.ViewSet):
             search_query = request.query_params.get('search', '').strip()[:100]  # max 100 chars
             page_num = int(request.query_params.get('page', 1))
             page_size = int(request.query_params.get('page_size', 10))
-            is_public_request = not (request.user.is_authenticated and (request.user.is_staff or request.user.role == 'OWNER'))
+            is_public_request = not (request.user.is_authenticated and (request.user.is_staff or request.user.role == 'LANDLORD'))
             # Hash the search term so the Redis key length is always fixed
             search_hash = hashlib.md5(search_query.encode()).hexdigest()
             cache_key = f'public_apartments_{search_hash}_p{page_num}_s{page_size}'
@@ -98,11 +98,11 @@ class ApartmentViewSet(viewsets.ViewSet):
                 cached_data = cache.get(cache_key)
                 if cached_data:
                     return Response(cached_data, status=status.HTTP_200_OK)
-            apartments = Apartment.objects.select_related('owner').prefetch_related('images').all().order_by('id')
+            apartments = Apartment.objects.select_related('landlord').prefetch_related('images').all().order_by('id')
             if request.user.is_authenticated and request.user.is_staff:
                 pass
-            elif request.user.is_authenticated and request.user.role == 'OWNER':
-                apartments = apartments.filter(owner=request.user.id)
+            elif request.user.is_authenticated and request.user.role == 'LANDLORD':
+                apartments = apartments.filter(landlord=request.user.id)
             else:
                 apartments = apartments.filter(is_verified=True, is_available=True)
             if search_query:
@@ -139,15 +139,15 @@ class ApartmentViewSet(viewsets.ViewSet):
         Retrieve an apartment endpoint.
 
         Retrieves apartment data using apartment ID.
-        Owners can only retrieve their own apartments.
+        Landlords can only retrieve their own apartments.
         """
         try:
             # Build base filter
             filters = {'id': pk}
-            # Owners are restricted to their own apartments
-            if request.user.is_authenticated and request.user.role == 'OWNER':
-                filters['owner'] = request.user.id
-            apartment = Apartment.objects.select_related('owner').prefetch_related('images').get(**filters)
+            # Landlords are restricted to their own apartments
+            if request.user.is_authenticated and request.user.role == 'LANDLORD':
+                filters['landlord'] = request.user.id
+            apartment = Apartment.objects.select_related('landlord').prefetch_related('images').get(**filters)
             serializer = self.serializer_class(apartment)
             return Response(
                 { 'success': True, 'status': 200, 'message': 'Apartment retrieved successfully', 'data': serializer.data},
@@ -165,21 +165,21 @@ class ApartmentViewSet(viewsets.ViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    @extend_schema(request=OwnerApartmentUpdateSerializer)
+    @extend_schema(request=LandlordApartmentUpdateSerializer)
     def partial_update(self, request, pk=None):
         """
         Update an apartment endpoint.
 
-        Owners can only update limited fields of their own apartments.
+        Landlords can only update limited fields of their own apartments.
         Admins can update any field of any apartment.
         """
         try:
             if request.user.is_staff:
-                apartment = Apartment.objects.select_related('owner').prefetch_related('images').get(id=pk)
+                apartment = Apartment.objects.select_related('landlord').prefetch_related('images').get(id=pk)
                 serializer = AdminApartmentUpdateSerializer(apartment, data=request.data, partial=True)
-            elif request.user.role == 'OWNER':
-                apartment = Apartment.objects.select_related('owner').prefetch_related('images').get(id=pk, owner=request.user.id)
-                serializer = OwnerApartmentUpdateSerializer(apartment, data=request.data, partial=True)
+            elif request.user.role == 'LANDLORD':
+                apartment = Apartment.objects.select_related('landlord').prefetch_related('images').get(id=pk, landlord=request.user.id)
+                serializer = LandlordApartmentUpdateSerializer(apartment, data=request.data, partial=True)
             else:
                 return Response(
                     {"success": False, "status": 403, "error": "You do not have permission to update apartments."},

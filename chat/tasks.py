@@ -15,7 +15,7 @@ def notify_new_message(message_id):
         return
     conversation = message.conversation
     recipient = (
-        conversation.apartment.owner
+        conversation.apartment.landlord
         if message.sender_id == conversation.tenant_id
         else conversation.tenant
     )

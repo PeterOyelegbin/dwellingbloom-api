@@ -36,7 +36,7 @@ class Apartment(models.Model):
     This model represent an apartment listing.
     """
     id = models.UUIDField(default=uuid4, primary_key=True, editable=False)
-    owner = models.ForeignKey(UserModel, on_delete=models.SET_NULL, null=True, related_name="owned_apartments")
+    landlord = models.ForeignKey(UserModel, on_delete=models.SET_NULL, null=True, related_name="owned_apartments")
     name = models.CharField(max_length=100)
     apartment_type = models.CharField(max_length=20, choices=ApartmentType.choices, db_index=True)
     description = models.TextField(blank=True)
@@ -46,8 +46,8 @@ class Apartment(models.Model):
     city = models.CharField(max_length=100, db_index=True)
     state = models.CharField(max_length=100, db_index=True)
     video = models.FileField(storage=VideoMediaCloudinaryStorage(), upload_to="videos/", validators=[validate_video, validate_video_size])
-    monthly_rent = models.DecimalField(max_digits=10, decimal_places=2)
-    agreement_fee = models.DecimalField(max_digits=10, decimal_places=2)
+    monthly_rent = models.PositiveBigIntegerField()
+    agreement_fee = models.PositiveBigIntegerField()
     document_type = models.CharField(max_length=20, choices=DocumentType.choices)
     document_file = models.FileField(storage=RawMediaCloudinaryStorage(), upload_to="documents/", validators=[validate_file_size])
     is_available = models.BooleanField(default=True, db_index=True)

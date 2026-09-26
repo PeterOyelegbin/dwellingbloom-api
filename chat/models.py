@@ -8,7 +8,7 @@ from properties.models import Apartment
 class Conversation(models.Model):
     """
     A conversation is scoped to a single apartment listing between the
-    tenant who initiated it and the apartment's owner.
+    tenant who initiated it and the apartment's landlord.
     """
     id = models.UUIDField(default=uuid4, primary_key=True, editable=False)
     apartment = models.ForeignKey(Apartment, on_delete=models.CASCADE, related_name="conversations")
@@ -26,11 +26,11 @@ class Conversation(models.Model):
         ]
 
     @property
-    def owner(self):
-        return self.apartment.owner
+    def landlord(self):
+        return self.apartment.landlord
 
     def __str__(self):
-        return f"{self.tenant} <-> {self.apartment.owner} ({self.apartment.name})"
+        return f"{self.tenant} <-> {self.apartment.landlord} ({self.apartment.name})"
 
 
 class Message(models.Model):

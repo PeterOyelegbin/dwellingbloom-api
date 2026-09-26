@@ -24,8 +24,8 @@ class ConversationViewSet(viewsets.ModelViewSet):
         
         user = self.request.user
         return (
-            Conversation.objects.filter(Q(tenant=user) | Q(apartment__owner=user))
-            .select_related("apartment", "tenant", "apartment__owner")
+            Conversation.objects.filter(Q(tenant=user) | Q(apartment__landlord=user))
+            .select_related("apartment", "tenant", "apartment__landlord")
             .prefetch_related("messages")
         )
 
@@ -68,7 +68,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
         after = request.query_params.get("after")
         if after:
             qs = qs.filter(created_at__gt=after)
-        return Response(MessageSerializer(qs, many=True).data)
+        return Response(MessageSerializer(qs, many=True).data, status=status.HTTP_200_OK)
 
     @extend_schema(
         summary="Mark all messages from the other party as read.",
@@ -78,4 +78,4 @@ class ConversationViewSet(viewsets.ModelViewSet):
     def mark_read(self, request, pk=None):
         conversation = self.get_object()
         updated = conversation.messages.filter(is_read=False).exclude(sender=request.user).update(is_read=True)
-        return Response({"marked_read": updated})
+        return Response({"marked_read": updated}, status=status.HTTP_200_OK)

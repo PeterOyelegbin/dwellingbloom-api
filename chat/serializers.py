@@ -38,7 +38,7 @@ class ConversationListSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.DictField(child=serializers.CharField(), allow_null=True))
     def get_other_party(self, obj):
         request_user = self.context["request"].user
-        other = obj.apartment.owner if request_user.id == obj.tenant_id else obj.tenant
+        other = obj.apartment.landlord if request_user.id == obj.tenant_id else obj.tenant
         if other is None:
             return None
         return {"id": str(other.id), "name": f"{other.first_name} {other.last_name}"}
@@ -72,7 +72,7 @@ class ConversationCreateSerializer(serializers.ModelSerializer):
         request_user = self.context["request"].user
         if request_user.role != "TENANT":
             raise serializers.ValidationError("Only tenants can start a conversation.")
-        if apartment.owner_id == request_user.id:
+        if apartment.landlord_id == request_user.id:
             raise serializers.ValidationError("You can't message yourself about your own listing.")
         return apartment
 

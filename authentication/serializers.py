@@ -1,4 +1,5 @@
 from rest_framework import serializers, validators
+from drf_spectacular.utils import extend_schema_field
 from django.core.validators import RegexValidator
 from .models import UserModel, PasswordResetToken
 
@@ -20,13 +21,14 @@ class SignupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserModel
-        fields = ('id', 'first_name', 'last_name', 'email', 'password', 'confirm_password', 'phone_number', 'role', 'bvn', 'account_number', 'account_name', 'bank_name')
+        # fields = ('id', 'first_name', 'last_name', 'email', 'password', 'confirm_password', 'phone_number', 'role', 'bvn', 'account_number', 'account_name', 'bank_name')
+        fields = ('id', 'first_name', 'last_name', 'email', 'password', 'confirm_password', 'phone_number', 'role', 'bvn')
         extra_kwargs = {
             'id': {'read_only': True},
             'bvn': {'write_only': True},
-            'account_number': {'write_only': True},
-            'account_name': {'write_only': True},
-            'bank_name': {'write_only': True},
+            # 'account_number': {'write_only': True},
+            # 'account_name': {'write_only': True},
+            # 'bank_name': {'write_only': True},
         }
 
     def validate(self, attrs):
@@ -143,17 +145,19 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserModel
-        fields = ('id', 'first_name', 'last_name', 'email', 'phone_number', 'role', 'bvn', 'account_number', 'account_name', 'bank_name')
+        fields = ('id', 'first_name', 'last_name', 'email', 'phone_number', 'role', 'bvn')
+        # fields = ('id', 'first_name', 'last_name', 'email', 'phone_number', 'role', 'bvn', 'account_number', 'account_name', 'bank_name')
         read_only_fields = ['id', 'first_name', 'last_name', 'email', 'role', 'bvn']
 
+    @extend_schema_field(serializers.CharField)
     def get_bvn(self, obj):
         """Mask BVN — show only last 4 digits."""
         return f'***{obj.bvn[-4:]}' if obj.bvn else None
 
 
-class OwnerSummarySerializer(serializers.ModelSerializer):
+class LandlordSummarySerializer(serializers.ModelSerializer):
     """
-    Minimal read-only serializer for embedding owner info in apartment responses.
+    Minimal read-only serializer for embedding landlord info in apartment responses.
     Exposes only non-sensitive identity fields.
     """
     class Meta:
@@ -167,16 +171,17 @@ class AdminUserSerializer(serializers.ModelSerializer):
     are masked to comply with NDPR data minimisation requirements.
     """
     bvn = serializers.SerializerMethodField()
-    account_number = serializers.SerializerMethodField()
+    # account_number = serializers.SerializerMethodField()
 
     class Meta:
         model = UserModel
-        fields = ['id', 'first_name', 'last_name', 'email', 'phone_number', 'role', 'bvn', 'account_number', 'account_name', 'bank_name', 'is_verified', 'is_active']
+        fields = ['id', 'first_name', 'last_name', 'email', 'phone_number', 'role', 'bvn', 'is_verified', 'is_active']
+        # fields = ['id', 'first_name', 'last_name', 'email', 'phone_number', 'role', 'bvn', 'account_number', 'account_name', 'bank_name', 'is_verified', 'is_active']
 
     def get_bvn(self, obj):
         """Mask BVN — show only last 4 digits."""
         return f'***{obj.bvn[-4:]}' if obj.bvn else None
 
-    def get_account_number(self, obj):
-        """Mask account number — show only last 4 digits."""
-        return f'***{obj.account_number[-4:]}' if obj.account_number else None
+    # def get_account_number(self, obj):
+    #     """Mask account number — show only last 4 digits."""
+    #     return f'***{obj.account_number[-4:]}' if obj.account_number else None

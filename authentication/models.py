@@ -16,7 +16,7 @@ class UserModel(AbstractUser):
     """
     ROLE_CHOICES = (
         ('TENANT', 'Tenant'),
-        ('OWNER', 'Owner'),
+        ('LANDLORD', 'Landlord'),
     )
 
     username = None
@@ -28,9 +28,9 @@ class UserModel(AbstractUser):
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='TENANT', db_index=True)
     # nin = models.CharField(max_length=25, blank=True, null=True)
     bvn = models.CharField(max_length=25, blank=True, null=True)
-    account_number = models.CharField(max_length=10, blank=True, null=True)
-    account_name = models.CharField(max_length=255, blank=True, null=True)
-    bank_name = models.CharField(max_length=255, blank=True, null=True)
+    # account_number = models.CharField(max_length=10, blank=True, null=True)
+    # account_name = models.CharField(max_length=255, blank=True, null=True)
+    # bank_name = models.CharField(max_length=255, blank=True, null=True)
     is_verified = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
