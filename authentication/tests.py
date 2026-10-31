@@ -30,6 +30,7 @@ class UserViewsTestCase(TestCase):
         self.signup_url = reverse('signup')
         self.login_url = reverse('login')
         self.verify_email_url = reverse('verify-email')
+        self.reset_password_url = reverse('reset-password')
         self.user_data = {
             'email': 'test@example.com',
             'password': 'tEstp@ssword1',
@@ -136,3 +137,17 @@ class UserViewsTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data['success'], False)
         self.assertEqual(response.data['error'], 'Invalid email or password.')
+
+    def test_reset_password_requires_email(self):
+        response = self.client.post(self.reset_password_url, data={}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['error'], 'Email is required.')
+
+    def test_reset_password_rejects_blank_email_with_required_message(self):
+        response = self.client.post(
+            self.reset_password_url,
+            data={'email': ''},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['error'], 'Email is required.')

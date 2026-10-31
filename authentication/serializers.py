@@ -6,10 +6,18 @@ from .models import UserModel, PasswordResetToken
 
 class SignupSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(validators=[
-            validators.UniqueValidator(queryset=UserModel.objects.all())
+            validators.UniqueValidator(
+                queryset=UserModel.objects.all(),
+                message='Email address already exists!'
+            )
         ]
     )
-    password = serializers.CharField(min_length=8, write_only=True, validators=[
+    password = serializers.CharField(min_length=8, write_only=True,
+        error_messages={
+            'required': 'Password field is required!',
+            'blank': 'Password field cannot be blank!',
+        },
+        validators=[
             RegexValidator(
                 regex=r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$',
                 message='Password must be 8+ chars with a mix of uppercase, lowercase, numbers, and symbols'
@@ -17,7 +25,12 @@ class SignupSerializer(serializers.ModelSerializer):
         ],
         help_text="8+ chars with uppercase, lowercase, number, and special symbol"
     )
-    confirm_password = serializers.CharField(min_length=8, write_only=True)
+    confirm_password = serializers.CharField(min_length=8, write_only=True,
+        error_messages={
+            'required': 'Confirm password field is required!',
+            'blank': 'Confirm password field cannot be blank!',
+        }
+    )
 
     class Meta:
         model = UserModel
@@ -65,8 +78,18 @@ class VerifyEmailSerializer(serializers.Serializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    password = serializers.CharField(write_only=True)
+    email = serializers.EmailField(
+        error_messages={
+            'required': 'Email field is required!',
+            'blank': 'Email field cannot be blank!',
+        }
+    )
+    password = serializers.CharField(write_only=True,
+        error_messages={
+            'required': 'Password field is required!',
+            'blank': 'Password field cannot be blank!',
+        }
+    )
 
     def validate(self, attrs):
         email = attrs.get('email')
@@ -101,8 +124,18 @@ class ResetPasswordSerializer(serializers.Serializer):
 
 
 class UpdatePasswordSerializer(serializers.Serializer):
-    otp = serializers.CharField()
-    new_password = serializers.CharField(min_length=8, write_only=True, validators=[
+    otp = serializers.CharField(
+        error_messages={
+            'required': 'OTP field is required!',
+            'blank': 'OTP field cannot be blank!',
+        }
+    )
+    new_password = serializers.CharField(min_length=8, write_only=True,
+        error_messages={
+            'required': 'New password field is required!',
+            'blank': 'New password field cannot be blank!',
+        },
+        validators=[
             RegexValidator(
                 regex=r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$',
                 message='Password must be 8+ chars with a mix of uppercase, lowercase, numbers, and symbols'
@@ -110,7 +143,12 @@ class UpdatePasswordSerializer(serializers.Serializer):
         ],
         help_text="8+ chars with uppercase, lowercase, number, and special symbol"
     )
-    confirm_password = serializers.CharField(min_length=8, write_only=True)
+    confirm_password = serializers.CharField(min_length=8, write_only=True,
+        error_messages={
+            'required': 'Confirm password field is required!',
+            'blank': 'Confirm password field cannot be blank!',
+        }
+    )
 
     def validate(self, attrs):
         otp = attrs.get('otp')

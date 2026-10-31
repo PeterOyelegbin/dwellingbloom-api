@@ -85,6 +85,7 @@ INSTALLED_APPS = [
     'authentication',
     'properties',
     'chat',
+    'escrow',
 ]
 
 MIDDLEWARE = [
@@ -234,7 +235,7 @@ DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 # DRF-Spectacular config
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Dwelling Bloom API',
-    'DESCRIPTION': 'Dwelling Bloom is a real estate platform designed to simplify the process of renting or buying properties in Nigeria eliminating the fraudulent agent and uneccessary fees. This API provides the backend infrastructure necessary for user authentication, property management, interaction with a database of available properties, and payment.',
+    'DESCRIPTION': 'Dwelling Bloom is a P2P rental Marketplace designed to simplify the process of renting an apartment in Nigeria, eliminating fraudulent agents and unnecessary fees. This API provides the backend infrastructure necessary for user authentication, RBAC property management, in-app chat interaction, and escrow payments integrated with Paystack to protect the tenant and homeowner.',
     'VERSION': '1.0.0',
     'CONTACT': {'name': 'Peter Oyelegbin', 'url': 'https://peteroyelegbin.com.ng', 'email': 'peteroyelegbin@gmail.com'},
     'LICENSE': {'name': 'MIT License', 'url': 'https://opensource.org/licenses/MIT'},
@@ -267,6 +268,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'Admin', 'description': 'Admin management endpoints'},
         {'name': 'Apartment', 'description': 'Endpoints for managing apartment listings'},
         {'name': 'Conversations', 'description': 'Endpoints for managing chat functionality'},
+        {'name': 'Escrows', 'description': 'Endpoints for managing escrow transactions'},
     ],
 }
 
@@ -396,6 +398,14 @@ EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool, default=False)
 EMAIL_USE_SSL = config("EMAIL_USE_SSL", cast=bool, default=False)
 EMAIL_TIMEOUT = 30  # 30 sec
+
+
+# Paystack config
+PAYSTACK_BASE_URL = config("PAYSTACK_BASE_URL")
+PAYSTACK_SECRET_KEY = config("PAYSTACK_SECRET_KEY")
+PAYSTACK_PUBLIC_KEY = config("PAYSTACK_PUBLIC_KEY")
+PLATFORM_FEE_PERCENT = config("PLATFORM_FEE_PERCENT", cast=float)
+FRONTEND_URL=config("FRONTEND_URL", default="http://localhost:3000")
 
 
 # Logging config

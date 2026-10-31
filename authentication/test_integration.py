@@ -87,6 +87,15 @@ class UserManagementTests(APITestCase):
         logout_response = self.client.post(logout_url, data={'refresh': refresh_token}, format='json')
         self.assertEqual(logout_response.status_code, status.HTTP_200_OK)
 
+        self.client.credentials()
+        refresh_url = reverse('token-refresh')
+        refresh_response = self.client.post(
+            refresh_url,
+            data={'refresh': refresh_token},
+            format='json',
+        )
+        self.assertEqual(refresh_response.status_code, status.HTTP_401_UNAUTHORIZED)
+
 
     @patch('utils.mail_config.send_email_task.delay')
     def test_password_reset(self, mock_send_email):

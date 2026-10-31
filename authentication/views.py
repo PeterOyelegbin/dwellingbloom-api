@@ -247,19 +247,20 @@ class AuthViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
-            # --- Blacklist the refresh token ---
-            try:
-                refresh = RefreshToken(serializer.validated_data['refresh'])
-                CustomJWTAuthentication.blacklist_token(jti=refresh.payload['jti'], exp=refresh.payload['exp'])
-            except TokenError as e:
-                general_logger.warning("Refresh token invalid during logout (ignoring): %s", e)
-            # --- Blacklist the access token ---
+            refresh = RefreshToken(serializer.validated_data['refresh'])
+            refresh.blacklist()
             access_token = request.auth
             if access_token:
                 CustomJWTAuthentication.blacklist_token(jti=access_token['jti'], exp=access_token.payload['exp'])
             return Response(
                 {"success": True, "status": 200, "message": "Successfully logged out."},
                 status=status.HTTP_200_OK,
+            )
+        except TokenError as e:
+            general_logger.warning("Invalid refresh token during logout: %s", e)
+            return Response(
+                {"success": False, "status": 401, "error": "Invalid or expired refresh token"},
+                status=status.HTTP_401_UNAUTHORIZED,
             )
         except Exception as e:
             general_logger.error("Exception error during logout: %s", e)
