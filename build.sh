@@ -2,6 +2,12 @@
 # Exit on error
 set -o errexit
 
+# Create a virtual environment in the project directory
+python3 -m venv .venv
+
+# Activate the virtual environment
+source .venv/bin/activate
+
 # Install Python dependencies
 echo "Installing dependencies..."
 uv pip install --system -r requirements.txt
