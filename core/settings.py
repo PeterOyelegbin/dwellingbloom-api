@@ -235,7 +235,7 @@ DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 # DRF-Spectacular config
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Dwelling Bloom API',
-    'DESCRIPTION': 'Dwelling Bloom is a P2P rental Marketplace designed to simplify the process of renting an apartment in Nigeria, eliminating fraudulent agents and unnecessary fees. This API provides the backend infrastructure necessary for user authentication, RBAC property management, in-app chat interaction, and escrow payments integrated with Paystack to protect the tenant and homeowner.',
+    'DESCRIPTION': 'Dwelling Bloom is a P2P Rental Marketplace designed to simplify the process of renting an apartment in Nigeria, eliminating fraudulent agents and unnecessary fees. This API provides the backend infrastructure necessary for user authentication, RBAC property management, in-app chat interaction, and escrow payments integrated with Paystack to protect the tenant and homeowner.',
     'VERSION': '1.0.0',
     'CONTACT': {'name': 'Peter Oyelegbin', 'url': 'https://peteroyelegbin.com.ng', 'email': 'peteroyelegbin@gmail.com'},
     'LICENSE': {'name': 'MIT License', 'url': 'https://opensource.org/licenses/MIT'},

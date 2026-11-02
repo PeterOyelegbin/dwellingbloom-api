@@ -28,6 +28,8 @@ class ApartmentSerializer(serializers.ModelSerializer):
 
 
 class ApartmentSummarySerializer(serializers.ModelSerializer):
+    images = ApartmentImageSerializer(many=True, read_only=True)
+    
     class Meta:
         model = Apartment
         fields = ("id", "name", "apartment_type", "bedrooms", "bathrooms", "city", "state", "monthly_rent", "images")

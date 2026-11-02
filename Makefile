@@ -5,15 +5,15 @@ install-deps:
 
 lint:
 	# Run linter
-	flake8 ./authentication ./core ./utils
+	flake8 ./escrow ./chat ./properties ./authentication ./utils ./core
 
 format-check:
 	# Check code formatting
-	black --check ./authentication ./core ./utils
+	black --check ./escrow ./chat ./properties ./authentication ./utils ./core
 
 format:
 	# Format code
-	black ./authentication ./core ./utils
+	black ./escrow ./chat ./properties ./authentication ./utils ./core
 
 tests:
 	# Run tests
@@ -31,7 +31,8 @@ start-celery:
 
 stop-celery:
 	# Stop Celery worker
-	pkill -f 'celery worker'
+	pkill -TERM -f 'celery'
+	ps -aux | grep celery
 
 run-app:
 	# Start the development server
