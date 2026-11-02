@@ -14,10 +14,11 @@ uv pip install --system -r requirements.txt
 
 # Apply any outstanding database migrations
 echo "Applying database migrations..."
-make run-migration
+./.venv/bin/python manage.py migrate
 
 # start celery worker
 echo "Starting Celery worker..."
-make start-celery
+celery -A core worker -Q default,emails -l info --concurrency=2 --detach
+# make start-celery
 
 echo "Build completed successfully!"
