@@ -4,7 +4,7 @@ set -o errexit
 
 # Install Python dependencies
 echo "Installing dependencies..."
-make install-deps
+uv pip install --system -r requirements.txt
 
 # Apply any outstanding database migrations
 echo "Applying database migrations..."
