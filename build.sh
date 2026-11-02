@@ -3,8 +3,8 @@
 set -o errexit
 
 # Install Python dependencies
-# echo "Installing dependencies..."
-# make install-deps
+echo "Installing dependencies..."
+make install-deps
 
 # Apply any outstanding database migrations
 echo "Applying database migrations..."
